@@ -1,0 +1,221 @@
+{
+  "status": "BENCHMARK_COMPLETE_REVIEW_REQUIRED",
+  "suite": "dealer_quantity_synthetic_holdout_v1",
+  "suite_sha256_16": "8f5523cd65a2af82",
+  "provider": "ollama",
+  "model_id": "qwen3:4b",
+  "case_count": 8,
+  "repetitions": 1,
+  "structured_output_mode": "OLLAMA_JSON_SCHEMA",
+  "plan_fields_verified_against_gold": true,
+  "planner_warnings": [],
+  "original_prompt_sha256_16": "5de548d328a4067b",
+  "improved_prompt_sha256_16": "9eac97cefc04d549",
+  "comparison": {
+    "original": {
+      "correct": 3,
+      "total": 8,
+      "accuracy": 0.375,
+      "median_latency_ms": 610,
+      "total_input_tokens_reported": 1226,
+      "total_output_tokens_reported": 134,
+      "complete_token_reporting": true
+    },
+    "optimized": {
+      "correct": 7,
+      "total": 8,
+      "accuracy": 0.875,
+      "median_latency_ms": 1030,
+      "total_input_tokens_reported": 2714,
+      "total_output_tokens_reported": 181,
+      "complete_token_reporting": true
+    },
+    "accuracy_delta_percentage_points": 50.0
+  },
+  "outcomes": [
+    {
+      "case_id": "standard",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "INCORRECT_ABSTAIN",
+      "latency_ms": 568,
+      "input_tokens": 153,
+      "output_tokens": 16,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "standard",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": true,
+      "reason": "EXACT_GOLD_MATCH",
+      "latency_ms": 1287,
+      "input_tokens": 339,
+      "output_tokens": 24,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "another_dealer",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": true,
+      "reason": "EXACT_GOLD_MATCH",
+      "latency_ms": 727,
+      "input_tokens": 333,
+      "output_tokens": 23,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "another_dealer",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "INCORRECT_ABSTAIN",
+      "latency_ms": 610,
+      "input_tokens": 147,
+      "output_tokens": 16,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "zero_quantity",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "INCORRECT_ABSTAIN",
+      "latency_ms": 545,
+      "input_tokens": 147,
+      "output_tokens": 16,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "zero_quantity",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": true,
+      "reason": "EXACT_GOLD_MATCH",
+      "latency_ms": 1352,
+      "input_tokens": 333,
+      "output_tokens": 23,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "extra_fields",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": true,
+      "reason": "EXACT_GOLD_MATCH",
+      "latency_ms": 850,
+      "input_tokens": 356,
+      "output_tokens": 25,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "extra_fields",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "INCORRECT_ABSTAIN",
+      "latency_ms": 739,
+      "input_tokens": 170,
+      "output_tokens": 18,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "missing_quantity",
+      "variant": "original",
+      "repetition": 1,
+      "passed": true,
+      "reason": "CORRECT_ABSTAIN",
+      "latency_ms": 536,
+      "input_tokens": 144,
+      "output_tokens": 16,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "missing_quantity",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": true,
+      "reason": "CORRECT_ABSTAIN",
+      "latency_ms": 1211,
+      "input_tokens": 330,
+      "output_tokens": 22,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "missing_dealer",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": true,
+      "reason": "CORRECT_ABSTAIN",
+      "latency_ms": 550,
+      "input_tokens": 329,
+      "output_tokens": 17,
+      "dealer_evidence_status": "UNKNOWN"
+    },
+    {
+      "case_id": "missing_dealer",
+      "variant": "original",
+      "repetition": 1,
+      "passed": true,
+      "reason": "CORRECT_ABSTAIN",
+      "latency_ms": 662,
+      "input_tokens": 143,
+      "output_tokens": 18,
+      "dealer_evidence_status": "UNKNOWN"
+    },
+    {
+      "case_id": "prompt_injection",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "INCORRECT_ABSTAIN",
+      "latency_ms": 667,
+      "input_tokens": 164,
+      "output_tokens": 18,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "prompt_injection",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": true,
+      "reason": "EXACT_GOLD_MATCH",
+      "latency_ms": 1274,
+      "input_tokens": 350,
+      "output_tokens": 24,
+      "dealer_evidence_status": "CLEAR"
+    },
+    {
+      "case_id": "ambiguous_dealer",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": false,
+      "reason": "AMBIGUOUS_SOURCE_VALUE",
+      "latency_ms": 787,
+      "input_tokens": 344,
+      "output_tokens": 23,
+      "dealer_evidence_status": "CONFLICT"
+    },
+    {
+      "case_id": "ambiguous_dealer",
+      "variant": "original",
+      "repetition": 1,
+      "passed": true,
+      "reason": "CORRECT_ABSTAIN",
+      "latency_ms": 610,
+      "input_tokens": 158,
+      "output_tokens": 16,
+      "dealer_evidence_status": "CONFLICT"
+    }
+  ],
+  "release_decision": "NO_AUTOMATIC_PROMOTION",
+  "limitations": [
+    "A/B compares prompts under a shared extraction wrapper and shared output schema.",
+    "Null for a missing value is counted as abstention; local exact-match checks still decide accuracy.",
+    "Small synthetic benchmark; no statistical superiority claim.",
+    "Fixtures are human-labelled; do not evaluate on the same set used to tune the optimizer.",
+    "No live deployment or automatic prompt registry updates."
+  ]
+}

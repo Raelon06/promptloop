@@ -1,0 +1,7 @@
+{
+  "user_prompt": "Şu satış metnindeki bayi ve miktar bilgilerini çıkar.",
+  "source_text": "Bayi: D000123; Miktar: 24 karton",
+  "provider": "ollama",
+  "model_id": "qwen3:4b",
+  "benchmark_id": null
+}

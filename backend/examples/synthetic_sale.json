@@ -1,0 +1,6 @@
+{
+  "user_prompt": "Şu satış metnindeki bayi ve miktar bilgilerini çıkar.",
+  "source_text": "Bayi: D000123; Ürün: Ürün A; Miktar: 24 karton",
+  "provider": "mock",
+  "benchmark_id": "synthetic_sale_v1"
+}

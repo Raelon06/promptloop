@@ -1,0 +1,203 @@
+{
+  "status": "BENCHMARK_COMPLETE_REVIEW_REQUIRED",
+  "suite": "dealer_quantity_synthetic_holdout_v1",
+  "suite_sha256_16": "8f5523cd65a2af82",
+  "provider": "ollama",
+  "model_id": "qwen3:4b",
+  "case_count": 8,
+  "repetitions": 1,
+  "plan_fields_verified_against_gold": true,
+  "planner_warnings": [],
+  "original_prompt_sha256_16": "5de548d328a4067b",
+  "improved_prompt_sha256_16": "9eac97cefc04d549",
+  "comparison": {
+    "original": {
+      "correct": 0,
+      "total": 8,
+      "accuracy": 0.0,
+      "median_latency_ms": 2489,
+      "total_input_tokens_reported": 1186,
+      "total_output_tokens_reported": 673,
+      "complete_token_reporting": true
+    },
+    "optimized": {
+      "correct": 0,
+      "total": 8,
+      "accuracy": 0.0,
+      "median_latency_ms": 1307,
+      "total_input_tokens_reported": 2674,
+      "total_output_tokens_reported": 336,
+      "complete_token_reporting": true
+    },
+    "accuracy_delta_percentage_points": 0.0
+  },
+  "outcomes": [
+    {
+      "case_id": "standard",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 2866,
+      "input_tokens": 148,
+      "output_tokens": 90
+    },
+    {
+      "case_id": "standard",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 1806,
+      "input_tokens": 334,
+      "output_tokens": 42
+    },
+    {
+      "case_id": "another_dealer",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 1258,
+      "input_tokens": 328,
+      "output_tokens": 42
+    },
+    {
+      "case_id": "another_dealer",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 2194,
+      "input_tokens": 142,
+      "output_tokens": 76
+    },
+    {
+      "case_id": "zero_quantity",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 2182,
+      "input_tokens": 142,
+      "output_tokens": 76
+    },
+    {
+      "case_id": "zero_quantity",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 1261,
+      "input_tokens": 328,
+      "output_tokens": 42
+    },
+    {
+      "case_id": "extra_fields",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 1332,
+      "input_tokens": 351,
+      "output_tokens": 42
+    },
+    {
+      "case_id": "extra_fields",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 3068,
+      "input_tokens": 165,
+      "output_tokens": 104
+    },
+    {
+      "case_id": "missing_quantity",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 2310,
+      "input_tokens": 139,
+      "output_tokens": 80
+    },
+    {
+      "case_id": "missing_quantity",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 1283,
+      "input_tokens": 325,
+      "output_tokens": 42
+    },
+    {
+      "case_id": "missing_dealer",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 1283,
+      "input_tokens": 324,
+      "output_tokens": 42
+    },
+    {
+      "case_id": "missing_dealer",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 1895,
+      "input_tokens": 138,
+      "output_tokens": 65
+    },
+    {
+      "case_id": "prompt_injection",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 2797,
+      "input_tokens": 159,
+      "output_tokens": 95
+    },
+    {
+      "case_id": "prompt_injection",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 1335,
+      "input_tokens": 345,
+      "output_tokens": 42
+    },
+    {
+      "case_id": "ambiguous_dealer",
+      "variant": "optimized",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 1331,
+      "input_tokens": 339,
+      "output_tokens": 42
+    },
+    {
+      "case_id": "ambiguous_dealer",
+      "variant": "original",
+      "repetition": 1,
+      "passed": false,
+      "reason": "FIELD_SET_MISMATCH",
+      "latency_ms": 2668,
+      "input_tokens": 153,
+      "output_tokens": 87
+    }
+  ],
+  "release_decision": "NO_AUTOMATIC_PROMOTION",
+  "limitations": [
+    "A/B compares prompts under a shared extraction wrapper and shared output schema.",
+    "Small synthetic benchmark; no statistical superiority claim.",
+    "Fixtures are human-labelled; do not evaluate on the same set used to tune the optimizer.",
+    "No live deployment or automatic prompt registry updates."
+  ]
+}
