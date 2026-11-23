@@ -12,152 +12,20 @@ import {
   History,
   Trash2,
   AlertCircle,
-  ExternalLink,
   ChevronDown,
   X,
+  SlidersHorizontal,
+  RefreshCw,
+  Building2,
+  Users,
+  FileCode,
 } from "lucide-react";
-import { optimizePrompt, fetchModels, clarifyPrompt } from "../lib/api";
+import { optimizePrompt, fetchModels } from "../lib/api";
 import {
   OptimizeResponse,
   ModelCapability,
-  ClarifyQuestion,
   OptimizeRequest,
 } from "../lib/types";
-
-function getClientClarificationQuestions(prompt: string): ClarifyQuestion[] {
-  const p = prompt.toLowerCase();
-
-  if (
-    p.includes("excel") ||
-    p.includes("analiz") ||
-    p.includes("rapor") ||
-    p.includes("özetle") ||
-    p.includes("incele")
-  ) {
-    return [
-      {
-        id: "sector_domain",
-        question: "Bu analiz hangi sektör veya iş alanı için?",
-        options: [
-          "FMCG / Hızlı Tüketim & Dağıtım",
-          "Perakende, Mağazacılık & E-Ticaret",
-          "Üretim, Sanayi & Lojistik",
-          "Finans, Muhasebe & Bankacılık",
-          "Diğer (Özel Belirtin...)",
-        ],
-        allow_custom: true,
-      },
-      {
-        id: "target_audience",
-        question: "Analiz raporu hangi hedef kitleye sunulacak?",
-        options: [
-          "C-Level / Üst Düzey Yönetici Özeti (Kısa & Net Aksiyonlar)",
-          "Operasyonel / Saha Ekibi (Detaylı Maddeler & KPI'lar)",
-          "Teknik & Analitik Uzman Ekip (Ham Metrikler & Formüller)",
-        ],
-        allow_custom: false,
-      },
-      {
-        id: "focus_metric",
-        question: "Analizde öne çıkarılacak ana öncelik nedir?",
-        options: [
-          "Maliyet, Bütçe ve Finansal Riskler",
-          "Operasyonel Hız ve Süreç İyileştirmeleri",
-          "Satış Büyümesi, Karlılık & Müşteri Trendleri",
-        ],
-        allow_custom: false,
-      },
-    ];
-  }
-
-  if (
-    p.includes("çıkar") ||
-    p.includes("ayıkla") ||
-    p.includes("çek") ||
-    p.includes("parse") ||
-    p.includes("bul")
-  ) {
-    return [
-      {
-        id: "sector_domain",
-        question: "Bu veri hangi sektör veya iş alanına ait?",
-        options: [
-          "FMCG / Dağıtım & Bayi Siparişleri",
-          "Finans & Muhasebe / Fatura & Ekstre",
-          "E-Ticaret / Müşteri Sipariş & Kargo",
-          "Diğer (Özel Belirtin...)",
-        ],
-        allow_custom: true,
-      },
-      {
-        id: "target_format",
-        question: "Ayıklanan verinin sunum formatı ne olsun?",
-        options: [
-          "JSON Şeması (Katı ve Yapılandırılmış)",
-          "Markdown Tablosu",
-          "Virgülle Ayrılmış CSV / Liste",
-        ],
-        allow_custom: false,
-      },
-    ];
-  }
-
-  if (
-    p.includes("kod") ||
-    p.includes("python") ||
-    p.includes("script") ||
-    p.includes("yazılım") ||
-    p.includes("sql")
-  ) {
-    return [
-      {
-        id: "sector_domain",
-        question: "Kodun çalışacağı iş / uygulama alanı nedir?",
-        options: [
-          "Veri Mühendisliği & ETL / Otomasyon",
-          "Web & API Geliştirme (Fullstack)",
-          "Yapay Zeka & Makine Öğrenimi",
-          "Diğer (Özel Belirtin...)",
-        ],
-        allow_custom: true,
-      },
-      {
-        id: "programming_language",
-        question: "Hedeflenen programlama dili ve ortamı nedir?",
-        options: [
-          "Python (Modern 3.11+ / Tip Korumalı)",
-          "TypeScript / Node.js",
-          "SQL / Veritabanı Sorgusu",
-        ],
-        allow_custom: false,
-      },
-    ];
-  }
-
-  return [
-    {
-      id: "sector_domain",
-      question: "Bu görev hangi sektör veya uzmanlık alanı ile ilgili?",
-      options: [
-        "Kurumsal Yönetim & Strateji",
-        "Pazarlama, Satış & İletişim",
-        "İnsan Kaynakları & Operasyon",
-        "Diğer (Özel Belirtin...)",
-      ],
-      allow_custom: true,
-    },
-    {
-      id: "operational_role",
-      question: "Yapay zekanın üstlenmesini istediğiniz uzman rolü nedir?",
-      options: [
-        "Kıdemli Strateji & Yönetim Danışmanı",
-        "Uzman Veri ve İş Analisti",
-        "Teknik Çözüm Mimarı",
-      ],
-      allow_custom: false,
-    },
-  ];
-}
 
 interface HistoryItem {
   id: string;
@@ -167,6 +35,29 @@ interface HistoryItem {
   taskType: string;
 }
 
+const SECTOR_OPTIONS = [
+  "Genel / Evrensel",
+  "FMCG / Hızlı Tüketim",
+  "E-Ticaret & Perakende",
+  "Finans & Muhasebe",
+  "Teknoloji & Yazılım",
+  "Diğer (Özel)",
+];
+
+const AUDIENCE_OPTIONS = [
+  "C-Level / Üst Yönetim",
+  "Operasyon & Saha Ekibi",
+  "Teknik & Analitik Ekip",
+  "Müşteri / Son Kullanıcı",
+];
+
+const OUTPUT_FORMAT_OPTIONS = [
+  "Yapılandırılmış Rapor",
+  "Markdown Tablosu",
+  "Madde İşaretleri",
+  "JSON Şeması",
+];
+
 export function PromptOptimizer() {
   const [inputPrompt, setInputPrompt] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("openrouter/free");
@@ -175,17 +66,17 @@ export function PromptOptimizer() {
   >("openrouter");
   const [models, setModels] = useState<ModelCapability[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isTweaking, setIsTweaking] = useState<boolean>(false);
   const [result, setResult] = useState<OptimizeResponse | null>(null);
   const [editablePrompt, setEditablePrompt] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
 
-  // Etkileşimli Bağlam Soruları State'leri
-  const [clarifyQuestions, setClarifyQuestions] = useState<ClarifyQuestion[]>([]);
-  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
-  const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({});
-  const [isClarifying, setIsClarifying] = useState<boolean>(false);
-  const [showClarifyModal, setShowClarifyModal] = useState<boolean>(false);
+  // Canlı Bağlam & İnce Ayar State'leri (Sayfa Üzerinde Doğrudan)
+  const [selectedSector, setSelectedSector] = useState<string>("Genel / Evrensel");
+  const [customSector, setCustomSector] = useState<string>("");
+  const [selectedAudience, setSelectedAudience] = useState<string>("C-Level / Üst Yönetim");
+  const [selectedFormat, setSelectedFormat] = useState<string>("Yapılandırılmış Rapor");
 
   // Doğrulanmış Çalışan Geçmiş (History) State'leri
   const [promptHistory, setPromptHistory] = useState<HistoryItem[]>([]);
@@ -201,12 +92,10 @@ export function PromptOptimizer() {
           setPromptHistory(parsed);
         }
       }
-    } catch {
-      // LocalStorage erişilemezse sessizce devam et
-    }
+    } catch {}
   }, []);
 
-  // Modelleri çek ve gerçek bağlantı durumunu doğrula
+  // Modelleri çek
   useEffect(() => {
     async function loadModels() {
       try {
@@ -246,75 +135,43 @@ export function PromptOptimizer() {
     loadModels();
   }, []);
 
-  const handleStartOptimization = async () => {
+  // Doğrudan optimize et (Modal yok)
+  const handleOptimize = async (
+    overrideSector?: string,
+    overrideAudience?: string,
+    overrideFormat?: string
+  ) => {
     if (!inputPrompt.trim() || inputPrompt.trim().length < 5) {
       setErrorMessage("Lütfen optimize etmek için en az 5 karakterden oluşan bir prompt yazın.");
       return;
     }
 
+    const isReTweak = Boolean(result);
+    if (isReTweak) {
+      setIsTweaking(true);
+    } else {
+      setIsLoading(true);
+    }
     setErrorMessage(null);
-    setIsClarifying(true);
-
-    let questionsToAsk: ClarifyQuestion[] = [];
 
     try {
-      const clarifyData = await clarifyPrompt(inputPrompt);
-      if (
-        clarifyData &&
-        clarifyData.questions &&
-        clarifyData.questions.length > 0
-      ) {
-        questionsToAsk = clarifyData.questions;
+      const sectorToUse = overrideSector !== undefined ? overrideSector : selectedSector;
+      const audienceToUse = overrideAudience !== undefined ? overrideAudience : selectedAudience;
+      const formatToUse = overrideFormat !== undefined ? overrideFormat : selectedFormat;
+
+      let sectorText = sectorToUse;
+      if (sectorToUse === "Diğer (Özel)" && customSector.trim()) {
+        sectorText = customSector.trim();
       }
-    } catch {
-      // Sunucu henüz hazır değilse yerel soru seti
-    }
 
-    if (questionsToAsk.length === 0) {
-      questionsToAsk = getClientClarificationQuestions(inputPrompt);
-    }
+      // STOK bağlamı oluştur
+      const contextLines = [
+        `• Hedeflenen Sektör / İş Alanı: ${sectorText}`,
+        `• Hedef Kitle Düzeyi: ${audienceToUse}`,
+        `• İstenen Çıktı Biçimi: ${formatToUse}`,
+      ].join("\n");
 
-    if (questionsToAsk.length > 0) {
-      setClarifyQuestions(questionsToAsk);
-      const initialAnswers: Record<string, string> = {};
-      questionsToAsk.forEach((q: ClarifyQuestion) => {
-        if (q.options && q.options.length > 0) {
-          initialAnswers[q.id] = q.options[0];
-        }
-      });
-      setSelectedAnswers(initialAnswers);
-      setShowClarifyModal(true);
-      setIsClarifying(false);
-      return;
-    }
-
-    setIsClarifying(false);
-    executeOptimization({});
-  };
-
-  const executeOptimization = async (answersToUse: Record<string, string>) => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    setShowClarifyModal(false);
-
-    try {
-      const resolvedAnswers: Record<string, string> = { ...answersToUse };
-      Object.keys(resolvedAnswers).forEach((key) => {
-        if (
-          resolvedAnswers[key]?.includes("Diğer") &&
-          customAnswers[key]?.trim()
-        ) {
-          resolvedAnswers[key] = `Özel Belirtilen Sektör/Alan: ${customAnswers[key].trim()}`;
-        }
-      });
-
-      let promptToSend = inputPrompt;
-      if (resolvedAnswers && Object.keys(resolvedAnswers).length > 0) {
-        const contextLines = Object.entries(resolvedAnswers)
-          .map(([k, v]) => `• ${v}`)
-          .join("\n");
-        promptToSend = `${inputPrompt}\n\n[KULLANICI TERCİHLERİ VE OPERASYONEL BAĞLAM]:\n${contextLines}`;
-      }
+      const promptToSend = `${inputPrompt}\n\n[KULLANICI TERCİHLERİ VE OPERASYONEL BAĞLAM]:\n${contextLines}`;
 
       const payload: OptimizeRequest = {
         prompt: promptToSend,
@@ -328,7 +185,7 @@ export function PromptOptimizer() {
       setResult(data);
       setEditablePrompt(data.improved_prompt);
 
-      // Çalışan geçmişe kaydet
+      // Geçmişe kaydet
       try {
         const historyItem: HistoryItem = {
           id: Date.now().toString(),
@@ -338,7 +195,7 @@ export function PromptOptimizer() {
             hour: "2-digit",
             minute: "2-digit",
           }),
-          taskType: data.task_type || "Genel",
+          taskType: sectorText !== "Genel / Evrensel" ? sectorText : (data.task_type || "Genel"),
         };
         const updated = [historyItem, ...promptHistory.slice(0, 24)];
         setPromptHistory(updated);
@@ -352,6 +209,7 @@ export function PromptOptimizer() {
       setErrorMessage(message);
     } finally {
       setIsLoading(false);
+      setIsTweaking(false);
     }
   };
 
@@ -362,7 +220,6 @@ export function PromptOptimizer() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback kopyalama
       const textArea = document.createElement("textarea");
       textArea.value = editablePrompt;
       document.body.appendChild(textArea);
@@ -389,10 +246,9 @@ export function PromptOptimizer() {
 
   return (
     <div className="w-full min-h-screen flex flex-col bg-[#07090E] text-[#EDEDED]">
-      {/* 1. ÜST BAR: Minimal Marka, Model Seçici & Durum, Geçmiş Butonu */}
+      {/* 1. ÜST BAR: Minimal Marka, Model Seçici & Durum, Geçmiş */}
       <header className="w-full border-b border-[#141925] bg-[#0A0D14]/80 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
-          {/* Sol: Minimal Marka ve Başlık */}
           <div className="flex items-center gap-3">
             <div className="w-7 h-7 rounded-lg bg-[#0E1522] border border-[#00E5FF]/30 flex items-center justify-center text-[#00E5FF] font-black text-xs">
               PL
@@ -407,9 +263,7 @@ export function PromptOptimizer() {
             </div>
           </div>
 
-          {/* Sağ: Model Seçimi, Durum Rozeti ve Geçmiş */}
           <div className="flex items-center gap-2.5">
-            {/* Model Seçici */}
             <div className="relative flex items-center">
               <select
                 value={selectedModel}
@@ -436,7 +290,6 @@ export function PromptOptimizer() {
               <ChevronDown className="w-3.5 h-3.5 text-[#64748B] absolute right-2 pointer-events-none" />
             </div>
 
-            {/* Gerçek Bağlantı Durumu */}
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#0E131F] border border-[#1C2538] text-[11px] font-mono text-[#94A3B8]">
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
@@ -446,7 +299,6 @@ export function PromptOptimizer() {
               <span>{isModelOnline ? "Bağlı" : "Çevrimdışı"}</span>
             </div>
 
-            {/* Geçmiş Butonu (Doğrulanmış çalışan özellik) */}
             <button
               type="button"
               onClick={() => setShowHistoryModal(true)}
@@ -473,7 +325,7 @@ export function PromptOptimizer() {
               <span>Prompt Studio</span>
             </h1>
             <p className="text-xs text-[#64748B]">
-              Promptunu yaz, yapay zekâ ile geliştir ve daha etkili sonuçlar elde et.
+              Promptunu yaz, tek tıkla optimize et ve dilediğin sektör/hedef kitleye göre canlı olarak geliştir.
             </p>
           </div>
           <div className="text-[11px] text-[#475569] font-mono self-start sm:self-auto">
@@ -482,7 +334,7 @@ export function PromptOptimizer() {
         </div>
       </div>
 
-      {/* 3. ANA ÇALIŞMA ALANI: YAN YANA İKİ DENGELİ PANEL */}
+      {/* 3. ANA ÇALIŞMA ALANI */}
       <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-10 flex-1 flex flex-col">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 items-stretch">
           {/* SOL PANEL: ORİJİNAL PROMPT EDİTÖRÜ */}
@@ -507,7 +359,7 @@ export function PromptOptimizer() {
             </div>
 
             {/* Metin Alanı */}
-            <div className="flex-1 flex flex-col min-h-[300px] sm:min-h-[380px]">
+            <div className="flex-1 flex flex-col min-h-[300px] sm:min-h-[420px]">
               <textarea
                 value={inputPrompt}
                 onChange={(e) => setInputPrompt(e.target.value)}
@@ -522,28 +374,24 @@ export function PromptOptimizer() {
               <div className="p-3 rounded-lg bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2 animate-in fade-in">
                 <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
-                  <p className="font-semibold">Optimizasyon Başarısız</p>
+                  <p className="font-semibold">Hata Oluştu</p>
                   <p className="text-rose-200/80 text-[11px]">{errorMessage}</p>
                 </div>
               </div>
             )}
 
-            {/* Aksiyon Butonu */}
+            {/* Aksiyon Butonu (Doğrudan Başlatır) */}
             <div className="pt-2 border-t border-[#141A27]">
               <button
                 type="button"
-                onClick={handleStartOptimization}
-                disabled={isLoading || isClarifying || !inputPrompt.trim()}
+                onClick={() => handleOptimize()}
+                disabled={isLoading || isTweaking || !inputPrompt.trim()}
                 className="w-full py-2.5 px-4 rounded-lg bg-[#00E5FF] hover:bg-[#33EAFF] active:bg-[#00C4D9] text-[#060913] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                {isLoading || isClarifying ? (
+                {isLoading ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-[#060913] border-t-transparent rounded-full animate-spin" />
-                    <span>
-                      {isClarifying
-                        ? "Bağlam Hazırlanıyor..."
-                        : "Yapay Zekâ ile Optimize Ediliyor..."}
-                    </span>
+                    <span>Yapay Zekâ ile Optimize Ediliyor...</span>
                   </>
                 ) : (
                   <>
@@ -556,7 +404,7 @@ export function PromptOptimizer() {
             </div>
           </div>
 
-          {/* SAĞ PANEL: OPTİMİZE EDİLMİŞ PROMPT SONUÇ ALANI */}
+          {/* SAĞ PANEL: OPTİMİZE EDİLMİŞ PROMPT & CANLI İNCE AYAR ÇİPLERİ */}
           <div className="flex flex-col rounded-xl bg-[#0B0E17] border border-[#161D2C] hover:border-[#222C42] transition p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between border-b border-[#141A27] pb-2.5">
               <div className="flex items-center gap-2">
@@ -574,9 +422,9 @@ export function PromptOptimizer() {
               )}
             </div>
 
-            {/* DURUM 1: LOADING */}
+            {/* LOADING DURUMU (İLK OPTİMİZASYON) */}
             {isLoading && (
-              <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] sm:min-h-[380px] text-center space-y-3">
+              <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] sm:min-h-[420px] text-center space-y-3">
                 <div className="w-8 h-8 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin" />
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-[#E2E8F0]">
@@ -589,14 +437,127 @@ export function PromptOptimizer() {
               </div>
             )}
 
-            {/* DURUM 2: SUCCESS */}
+            {/* SUCCESS DURUMU: CANLI İNCE AYAR ÇİPLERİ + EDİTÖR */}
             {!isLoading && result && (
               <div className="flex-1 flex flex-col space-y-3 animate-in fade-in duration-200">
-                <div className="flex-1 min-h-[300px] sm:min-h-[380px]">
+                {/* 🎯 CANLI SAYFA ÜZERİNDE BAĞLAM İNCE AYARI (TWEAK PANELİ) */}
+                <div className="p-3 rounded-xl bg-[#080B12] border border-[#161D2C] space-y-2.5">
+                  <div className="flex items-center justify-between text-xs border-b border-[#141A27] pb-1.5">
+                    <span className="font-semibold text-white flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-[#00E5FF]" />
+                      <span>Canlı Bağlam & İnce Ayar</span>
+                    </span>
+                    <span className="text-[10px] text-[#64748B]">
+                      Seçim yaptığınızda anında yeniden derlenir
+                    </span>
+                  </div>
+
+                  {/* Sektör Çipleri */}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1 text-[11px] text-[#94A3B8]">
+                      <Building2 className="w-3 h-3 text-[#00E5FF]" />
+                      <span>Sektör:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SECTOR_OPTIONS.map((sec) => {
+                        const isSelected = selectedSector === sec;
+                        return (
+                          <button
+                            key={sec}
+                            type="button"
+                            disabled={isTweaking}
+                            onClick={() => {
+                              setSelectedSector(sec);
+                              handleOptimize(sec, selectedAudience, selectedFormat);
+                            }}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer flex items-center gap-1 ${
+                              isSelected
+                                ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/50 shadow-sm"
+                                : "bg-[#0E131F] text-[#94A3B8] hover:text-white hover:bg-[#141C2E] border border-[#161D2C]"
+                            }`}
+                          >
+                            <span>{sec}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Diğer Sektör için Özel Giriş */}
+                    {selectedSector === "Diğer (Özel)" && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={customSector}
+                          onChange={(e) => setCustomSector(e.target.value)}
+                          placeholder="Örn: Otomotiv Yedek Parça, Sağlık/Medikal..."
+                          className="flex-1 bg-[#0E131F] border border-[#00E5FF]/40 rounded-lg px-2.5 py-1 text-xs text-white placeholder-[#475569] focus:outline-none focus:border-[#00E5FF]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleOptimize(
+                              "Diğer (Özel)",
+                              selectedAudience,
+                              selectedFormat
+                            )
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-[#00E5FF] text-[#060913] text-xs font-bold hover:bg-[#33EAFF] cursor-pointer"
+                        >
+                          Uygula
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Hedef Kitle Çipleri */}
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center gap-1 text-[11px] text-[#94A3B8]">
+                      <Users className="w-3 h-3 text-[#00E5FF]" />
+                      <span>Hedef Kitle:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {AUDIENCE_OPTIONS.map((aud) => {
+                        const isSelected = selectedAudience === aud;
+                        return (
+                          <button
+                            key={aud}
+                            type="button"
+                            disabled={isTweaking}
+                            onClick={() => {
+                              setSelectedAudience(aud);
+                              handleOptimize(selectedSector, aud, selectedFormat);
+                            }}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
+                              isSelected
+                                ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/50 shadow-sm"
+                                : "bg-[#0E131F] text-[#94A3B8] hover:text-white hover:bg-[#141C2E] border border-[#161D2C]"
+                            }`}
+                          >
+                            <span>{aud}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sonuç Editörü (İnce ayar sırasında hafif saydamlaşır) */}
+                <div
+                  className={`flex-1 relative min-h-[260px] sm:min-h-[320px] transition-opacity ${
+                    isTweaking ? "opacity-40 pointer-events-none" : "opacity-100"
+                  }`}
+                >
+                  {isTweaking && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#07090E]/60 backdrop-blur-xs rounded-xl">
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0E131F] border border-[#00E5FF]/40 text-[#00E5FF] text-xs font-medium shadow-lg">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Yeni bağlam ile güncelleniyor...</span>
+                      </div>
+                    </div>
+                  )}
                   <textarea
                     value={editablePrompt}
                     onChange={(e) => setEditablePrompt(e.target.value)}
-                    className="w-full h-full min-h-[300px] sm:min-h-[380px] bg-transparent text-[#E2E8F0] text-xs sm:text-sm focus:outline-none resize-none prompt-editor leading-relaxed selection:bg-[#00E5FF]/20"
+                    className="w-full h-full min-h-[260px] sm:min-h-[320px] bg-transparent text-[#E2E8F0] text-xs sm:text-sm focus:outline-none resize-none prompt-editor leading-relaxed selection:bg-[#00E5FF]/20"
                     spellCheck={false}
                   />
                 </div>
@@ -605,7 +566,7 @@ export function PromptOptimizer() {
                 <div className="pt-2 border-t border-[#141A27] flex items-center justify-between">
                   <span className="text-[11px] text-[#64748B] flex items-center gap-1.5">
                     <Edit3 className="w-3 h-3" />
-                    <span>Metin üzerinde doğrudan düzenleme yapabilirsiniz</span>
+                    <span>Doğrudan metni düzenleyebilir veya yukarıdan ince ayar yapabilirsiniz</span>
                   </span>
 
                   <button
@@ -633,9 +594,9 @@ export function PromptOptimizer() {
               </div>
             )}
 
-            {/* DURUM 3: EMPTY */}
+            {/* EMPTY DURUMU */}
             {!isLoading && !result && (
-              <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] sm:min-h-[380px] text-center space-y-3 text-[#475569]">
+              <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] sm:min-h-[420px] text-center space-y-3 text-[#475569]">
                 <div className="w-10 h-10 rounded-xl bg-[#0E131F] border border-[#161D2C] flex items-center justify-center text-[#64748B]">
                   <Sparkles className="w-5 h-5 text-[#64748B]" />
                 </div>
@@ -644,7 +605,7 @@ export function PromptOptimizer() {
                     Henüz optimize edilmiş prompt yok
                   </p>
                   <p className="text-[11px] text-[#64748B] leading-relaxed">
-                    Sol panele ham promptunu girip <strong>Promptu Optimize Et</strong> butonuna bastığında sonuç burada listelenir.
+                    Sol panele ham promptunu girip <strong>Promptu Optimize Et</strong> butonuna bastığında sonuç burada listelenir. Ardından sayfa üzerinde sektör ve hedef kitle ayarı yapabilirsin.
                   </p>
                 </div>
               </div>
@@ -653,124 +614,7 @@ export function PromptOptimizer() {
         </div>
       </main>
 
-      {/* 4. ETKİLEŞİMLİ BAĞLAM SORULARI MODAL PENCERESİ */}
-      {showClarifyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-xl bg-[#0B0E17] border border-[#1C2538] rounded-2xl shadow-2xl p-5 sm:p-6 space-y-5 animate-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between border-b border-[#141A27] pb-3">
-              <div className="space-y-0.5">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#00E5FF] font-semibold">
-                  Akıllı Bağlam Derinleştirme
-                </span>
-                <h3 className="text-sm sm:text-base font-bold text-white">
-                  Daha Keskin Bir Çıktı İçin Hızlı Tercihler
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowClarifyModal(false)}
-                className="text-[#64748B] hover:text-white transition p-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Soru Listesi */}
-            <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
-              {clarifyQuestions.map((q, idx) => (
-                <div
-                  key={q.id}
-                  className="p-3.5 rounded-xl bg-[#080B12] border border-[#141A27] space-y-2.5"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 rounded-full bg-[#00E5FF]/15 text-[#00E5FF] text-[10px] font-mono font-bold flex items-center justify-center">
-                      {idx + 1}
-                    </span>
-                    <h4 className="text-xs font-semibold text-[#E2E8F0]">
-                      {q.question}
-                    </h4>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
-                    {q.options.map((opt) => {
-                      const isSelected = selectedAnswers[q.id] === opt;
-                      return (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => {
-                            setSelectedAnswers((prev) => ({
-                              ...prev,
-                              [q.id]: opt,
-                            }));
-                          }}
-                          className={`p-2 rounded-lg text-xs text-left transition flex items-start gap-2 cursor-pointer ${
-                            isSelected
-                              ? "bg-[#00E5FF]/15 text-[#00E5FF] border border-[#00E5FF]/50 font-medium"
-                              : "bg-[#0E131F] text-[#94A3B8] hover:text-white hover:bg-[#131A2B] border border-transparent"
-                          }`}
-                        >
-                          <span
-                            className={`w-3 h-3 rounded-full border mt-0.5 flex-shrink-0 flex items-center justify-center ${
-                              isSelected
-                                ? "border-[#00E5FF] bg-[#00E5FF]"
-                                : "border-[#475569]"
-                            }`}
-                          >
-                            {isSelected && (
-                              <span className="w-1 h-1 rounded-full bg-[#060913]" />
-                            )}
-                          </span>
-                          <span className="leading-snug text-[11px]">{opt}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Diğer Seçeneği için Özel Giriş */}
-                  {selectedAnswers[q.id]?.includes("Diğer") && (
-                    <div className="pt-1.5 animate-in fade-in duration-150">
-                      <input
-                        type="text"
-                        value={customAnswers[q.id] || ""}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setCustomAnswers((prev) => ({ ...prev, [q.id]: val }));
-                        }}
-                        placeholder="Özel sektör veya alanı yazın (ör. Otomotiv Yedek Parça, Sağlık)..."
-                        className="w-full bg-[#0E131F] border border-[#00E5FF]/40 rounded-lg px-3 py-1.5 text-xs text-white placeholder-[#475569] focus:outline-none focus:border-[#00E5FF]"
-                        autoFocus
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Butonlar */}
-            <div className="flex items-center justify-between border-t border-[#141A27] pt-3">
-              <button
-                type="button"
-                onClick={() => executeOptimization({})}
-                className="text-xs text-[#64748B] hover:text-white transition px-2 py-1.5"
-              >
-                Soruları Atla
-              </button>
-
-              <button
-                type="button"
-                onClick={() => executeOptimization(selectedAnswers)}
-                className="py-2 px-5 rounded-lg bg-[#00E5FF] hover:bg-[#33EAFF] text-[#060913] font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
-              >
-                <span>Güçlendir ve Başlat</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 5. PROMPT GEÇMİŞİ MODAL PENCERESİ (Çalışan Özellik) */}
+      {/* 4. PROMPT GEÇMİŞİ MODAL PENCERESİ */}
       {showHistoryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="w-full max-w-xl bg-[#0B0E17] border border-[#1C2538] rounded-2xl shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-150">
