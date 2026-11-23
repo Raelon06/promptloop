@@ -1,4 +1,4 @@
-import { HealthResponse, ModelsResponse, OptimizeRequest, OptimizeResponse, AnalyzeRequest, AnalyzeResponse } from "./types";
+import { HealthResponse, ModelsResponse, OptimizeRequest, OptimizeResponse, AnalyzeRequest, AnalyzeResponse, ClarifyResponse } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://promptloop-api.onrender.com";
 
@@ -18,6 +18,22 @@ export async function fetchModels(): Promise<ModelsResponse> {
   });
   if (!res.ok) {
     throw new Error(`Failed to load models list (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function clarifyPrompt(prompt: string, taskType: string = "auto"): Promise<ClarifyResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/prompts/clarify`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ prompt, task_type: taskType }),
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => null);
+    throw new Error(errorBody?.detail || `Clarification failed (${res.status})`);
   }
   return res.json();
 }

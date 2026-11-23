@@ -45,11 +45,24 @@ export interface HealthResponse {
   };
 }
 
+export interface ClarifyQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  allow_custom: boolean;
+}
+
+export interface ClarifyResponse {
+  task_type: TaskType;
+  questions: ClarifyQuestion[];
+}
+
 export interface OptimizeRequest {
   prompt: string;
   provider?: "ollama" | "mock" | "openai" | "anthropic" | "gemini" | "openrouter";
   model_id?: string;
   preserve_language?: boolean;
+  context_answers?: Record<string, string>;
 }
 
 export interface OptimizeResponse {

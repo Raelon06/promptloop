@@ -24,8 +24,8 @@ import {
   Warehouse,
 } from "lucide-react";
 import { CopyButton } from "./CopyButton";
-import { optimizePrompt, fetchModels } from "../lib/api";
-import { OptimizeResponse, ModelCapability, TaskType } from "../lib/types";
+import { optimizePrompt, fetchModels, clarifyPrompt } from "../lib/api";
+import { OptimizeResponse, ModelCapability, TaskType, ClarifyQuestion } from "../lib/types";
 
 interface SampleCategory {
   category: string;
@@ -102,6 +102,12 @@ export function PromptOptimizer() {
   const [showSampleDropdown, setShowSampleDropdown] = useState<boolean>(false);
   const [activeCategory, setActiveCategory] = useState<string>("FMCG (Hızlı Tüketim Ürünleri)");
 
+  // Etkileşimli Bağlam Soruları State'leri
+  const [clarifyQuestions, setClarifyQuestions] = useState<ClarifyQuestion[]>([]);
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+  const [isClarifying, setIsClarifying] = useState<boolean>(false);
+  const [showClarifyModal, setShowClarifyModal] = useState<boolean>(false);
+
   useEffect(() => {
     async function loadModels() {
       try {
@@ -138,14 +144,43 @@ export function PromptOptimizer() {
     loadModels();
   }, []);
 
-  const handleOptimize = async () => {
+  const handleStartOptimization = async () => {
     if (!inputPrompt.trim() || inputPrompt.trim().length < 5) {
       setErrorMessage("Lütfen en az 5 karakterden oluşan bir prompt yazın.");
       return;
     }
 
+    setErrorMessage(null);
+    setIsClarifying(true);
+
+    try {
+      // 1. Önce soruları getir
+      const clarifyData = await clarifyPrompt(inputPrompt);
+      if (clarifyData.questions && clarifyData.questions.length > 0) {
+        setClarifyQuestions(clarifyData.questions);
+        // Varsayılan olarak ilk şıkkı seç
+        const initialAnswers: Record<string, string> = {};
+        clarifyData.questions.forEach((q: ClarifyQuestion) => {
+          if (q.options && q.options.length > 0) {
+            initialAnswers[q.id] = q.options[0];
+          }
+        });
+        setSelectedAnswers(initialAnswers);
+        setShowClarifyModal(true);
+        setIsClarifying(false);
+        return;
+      }
+    } catch {
+      // Soru alma başarısız olursa doğrudan optimizasyona geç
+    }
+    setIsClarifying(false);
+    executeOptimization({});
+  };
+
+  const executeOptimization = async (answersToUse: Record<string, string>) => {
     setIsLoading(true);
     setErrorMessage(null);
+    setShowClarifyModal(false);
 
     try {
       const data = await optimizePrompt({
@@ -153,6 +188,7 @@ export function PromptOptimizer() {
         provider: selectedProvider,
         model_id: selectedModel,
         preserve_language: true,
+        context_answers: answersToUse,
       });
 
       setResult(data);
@@ -401,14 +437,18 @@ export function PromptOptimizer() {
 
           <button
             type="button"
-            onClick={handleOptimize}
-            disabled={isLoading || !inputPrompt.trim()}
+            onClick={handleStartOptimization}
+            disabled={isLoading || isClarifying || !inputPrompt.trim()}
             className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-[#00E5FF] to-[#14B8A6] hover:from-[#33EAFF] hover:to-[#2DD4BF] text-[#060913] font-black text-sm flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cyan-button-glow cursor-pointer"
           >
-            {isLoading ? (
+            {isLoading || isClarifying ? (
               <>
                 <div className="w-4 h-4 border-2 border-[#060913] border-t-transparent rounded-full animate-spin" />
-                <span>Qwen3:4b ile Analiz Ediliyor ve Güçlendiriliyor...</span>
+                <span>
+                  {isClarifying
+                    ? "Görev Türü Tespit Ediliyor & Bağlam Soruları Hazırlanıyor..."
+                    : "Analiz Ediliyor ve Güçlendiriliyor..."}
+                </span>
               </>
             ) : (
               <>
@@ -489,6 +529,90 @@ export function PromptOptimizer() {
           )}
         </div>
       </div>
+
+      {/* Etkileşimli Bağlam Soruları Modal Penceresi (PromptCowboy Yaklaşımı) */}
+      {showClarifyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl bg-[#0D1322] border border-[#00E5FF]/40 rounded-2xl shadow-2xl p-6 sm:p-7 space-y-6 animate-in zoom-in-95 duration-200">
+            {/* Modal Başlığı */}
+            <div className="flex items-start justify-between border-b border-[#1E293B] pb-4">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-[#00E5FF]/15 text-[#00E5FF] text-[11px] font-bold uppercase tracking-wider">
+                  <Sparkles className="w-3 h-3 text-[#00E5FF]" />
+                  <span>Akıllı Prompt Derinleştirme</span>
+                </div>
+                <h3 className="text-lg font-black text-white">
+                  Daha Kusursuz Bir Prompt İçin 2-3 Hızlı Tercih
+                </h3>
+                <p className="text-xs text-gray-400">
+                  Aşağıdaki tercihler yapay zekanın tam olarak hedeflediğiniz formatta ve uzmanlıkta çıktı üretmesini sağlar.
+                </p>
+              </div>
+            </div>
+
+            {/* Sorular Listesi */}
+            <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
+              {clarifyQuestions.map((q, idx) => (
+                <div key={q.id} className="p-4 rounded-xl bg-[#080D1A] border border-[#1E293B] space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-[#00E5FF]/20 text-[#00E5FF] text-xs font-mono font-bold flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <h4 className="text-xs font-bold text-gray-200">{q.question}</h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {q.options.map((opt) => {
+                      const isSelected = selectedAnswers[q.id] === opt;
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => {
+                            setSelectedAnswers((prev) => ({ ...prev, [q.id]: opt }));
+                          }}
+                          className={`p-2.5 rounded-lg text-xs text-left transition flex items-start gap-2 cursor-pointer ${
+                            isSelected
+                              ? "bg-[#00E5FF]/15 text-[#00E5FF] border border-[#00E5FF]/60 font-semibold shadow-sm"
+                              : "bg-[#101728] text-gray-400 hover:text-gray-200 hover:bg-[#162035] border border-[#1E293B]"
+                          }`}
+                        >
+                          <span className={`w-3.5 h-3.5 rounded-full border mt-0.5 flex-shrink-0 flex items-center justify-center ${
+                            isSelected ? "border-[#00E5FF] bg-[#00E5FF]" : "border-gray-600"
+                          }`}>
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#060913]" />}
+                          </span>
+                          <span className="leading-snug">{opt}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Butonlar */}
+            <div className="flex items-center justify-between border-t border-[#1E293B] pt-4">
+              <button
+                type="button"
+                onClick={() => executeOptimization({})}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-400 hover:text-white hover:bg-[#162032] transition cursor-pointer"
+              >
+                Soruları Atla & Doğrudan Optimize Et
+              </button>
+
+              <button
+                type="button"
+                onClick={() => executeOptimization(selectedAnswers)}
+                className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-[#00E5FF] to-[#14B8A6] hover:from-[#33EAFF] hover:to-[#2DD4BF] text-[#060913] font-black text-xs flex items-center gap-2 transition cursor-pointer shadow-lg shadow-[#00E5FF]/20"
+              >
+                <span>Tercihlerle Güçlendir ve Başlat</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Yapay Zeka İyileştirme Analizi & Rubrik Detayları */}
       {result && (

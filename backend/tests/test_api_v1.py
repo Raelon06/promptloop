@@ -5,7 +5,9 @@ from app.api import health as legacy_health
 from app.api_v1 import (
     PromptAnalyzeRequest,
     PromptOptimizeRequest,
+    ClarifyRequest,
     analyze_prompt,
+    clarify_prompt,
     get_v1_health,
     get_v1_models,
     optimize_prompt,
@@ -62,6 +64,14 @@ class ApiV1Tests(unittest.TestCase):
         res = analyze_prompt(req, make_fake_request())
         self.assertEqual(res.quality_state, "BLOCKED")
         self.assertIn("SECRET_PATTERN_BLOCKED", res.preflight_errors)
+
+    def test_v1_clarify_prompt(self):
+        req = ClarifyRequest(prompt="Sipariş metninden bayi kodu ve adet ayıkla")
+        res = clarify_prompt(req, make_fake_request())
+        self.assertEqual(res.task_type, "data_extraction")
+        self.assertTrue(len(res.questions) >= 2)
+        q_ids = [q.id for q in res.questions]
+        self.assertIn("target_format", q_ids)
 
     def test_v1_optimize_mock(self):
         req = PromptOptimizeRequest(
