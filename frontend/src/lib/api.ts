@@ -1,6 +1,6 @@
 import { HealthResponse, ModelsResponse, OptimizeRequest, OptimizeResponse, AnalyzeRequest, AnalyzeResponse } from "./types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://promptloop-api.onrender.com";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch(`${API_BASE_URL}/api/v1/health`, {
