@@ -216,10 +216,6 @@ export function PromptOptimizer() {
         preserve_language: true,
       };
 
-      if (validAnswers.length > 0) {
-        payload.context_answers = Object.fromEntries(validAnswers);
-      }
-
       const data = await optimizePrompt(payload);
 
       setResult(data);
