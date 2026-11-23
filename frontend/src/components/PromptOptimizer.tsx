@@ -17,27 +17,75 @@ import {
   FileText,
   Copy,
   Zap,
+  ShoppingBag,
+  TrendingUp,
+  PackageCheck,
+  Tag,
+  Warehouse,
 } from "lucide-react";
 import { CopyButton } from "./CopyButton";
 import { optimizePrompt, fetchModels } from "../lib/api";
 import { OptimizeResponse, ModelCapability, TaskType } from "../lib/types";
 
-const SAMPLE_PROMPTS = [
+interface SampleCategory {
+  category: string;
+  items: {
+    title: string;
+    description: string;
+    prompt: string;
+  }[];
+}
+
+const SAMPLE_PROMPT_CATEGORIES: SampleCategory[] = [
   {
-    title: "Müşteri Destek Analizi",
-    prompt: "Bana gelen müşteri şikayetlerini ve taleplerini özetle, en sık tekrar eden problemleri çıkar ve her biri için acil aksiyon maddeleri listele.",
+    category: "FMCG (Hızlı Tüketim Ürünleri)",
+    items: [
+      {
+        title: "Bayi & Sipariş Ayrıştırma",
+        description: "Ham sipariş metninden bayi kodu, SKU, koli ve adet ayrıştırma",
+        prompt: "Aşağıdaki distribütör WhatsApp/e-posta sipariş metninden bayi kodunu, sipariş edilen ürün SKU kodunu, ürün adını, koli ve adet miktarını JSON formatında ayıkla. Belirtilmemiş alanlar için kesinlikle tahmin yapma, null bırak.",
+      },
+      {
+        title: "Tanzim Teşhir & Raf Uyumu",
+        description: "Saha denetim raporlarından bulunurluk ve planogram ihlali tespiti",
+        prompt: "Ulusal zincir marketlerden gelen saha satış temsilcisi denetim notlarını analiz et. Raf bulunurluğu (OSA), rakip aktivite ihlalleri ve planogram dışı uygulamaları maddeler halinde çıkar ve bölge müdürü için acil aksiyon listesi hazırla.",
+      },
+      {
+        title: "SKT & Stok Risk Analizi",
+        description: "Depo stok verilerinden son kullanma tarihi yaklaşan partileri raporlama",
+        prompt: "Aşağıdaki merkezi depo stok listesinden son kullanma tarihine (SKT) 90 günden az kalmış kritik SKU'ları tespit et. En yüksek finansal kayıp riski taşıyan ilk 5 ürünü listele ve acil çapraz promosyon/indirim kampanyası önerisi oluştur.",
+      },
+      {
+        title: "Ticari Pazarlama & Kampanya",
+        description: "B2B kanal (Geleneksel vs Modern) için promosyon mekaniği tasarımı",
+        prompt: "Gazlı içecek ve atıştırmalık kategorisinde geleneksel kanal (bakkal/tekel) ve modern kanal (yerel zincir marketler) için 1 aylık B2B satış artırıcı promosyon kurgusu tasarla. Bütçe verimliliği, ciro hedefi ve iade risklerini dikkate alan net bir tablo hazırla.",
+      },
+      {
+        title: "Zincir Market İtiraz & Ceza",
+        description: "Eksik sevkiyat veya lojistik gecikme cezalarına kurumsal yanıt taslağı",
+        prompt: "Bir süpermarket zincirinin depomuza kestiği 'eksik ve gecikmeli palet teslimatı cezası' faturasına karşılık, mücbir lojistik gerekçeler ve teslimat irsaliyelerimizi dayanak gösteren resmi, hukuki nezakete uygun ve yapıcı bir itiraz mektubu taslağı yaz.",
+      },
+    ],
   },
   {
-    title: "Python Veri Betiği",
-    prompt: "Bir kripto para API'sinden günlük Bitcoin fiyatlarını çeken, 14 günlük RSI hesaplayan ve aşırı alım durumlarını tespit eden bir Python betiği yaz.",
-  },
-  {
-    title: "Satış & Sipariş Ayıklama",
-    prompt: "Aşağıdaki metindeki bayi kodunu, sipariş edilen ürün adını, miktarını ve birimini (karton/adet) JSON olarak ayıkla. Eksik alan varsa kesinlikle tahmin etme.",
-  },
-  {
-    title: "Yönetici Strateji Özeti",
-    prompt: "Kurum içi GPU kümesi ile bulut yapay zeka API'lerinin maliyet, veri gizliliği ve yanıt süresi açısından karşılaştırmalı yönetici özetini hazırla.",
+    category: "Yazılım, Veri & Analiz",
+    items: [
+      {
+        title: "Python Veri & API Betiği",
+        description: "Döviz ve kripto API entegrasyonu ve gösterge hesabı",
+        prompt: "Bir kripto para API'sinden günlük Bitcoin fiyatlarını çeken, 14 günlük RSI hesaplayan ve aşırı alım/satım durumlarını tespit edip e-posta ile bildiren modüler bir Python betiği yaz.",
+      },
+      {
+        title: "Müşteri Destek & Şikayet Sınıflandırma",
+        description: "Gelen çağrı/bilet metinlerini duygu ve aciliyet derecesine göre gruplama",
+        prompt: "Bana gelen müşteri şikayetlerini ve taleplerini özetle, en sık tekrar eden problemleri çıkar, duygu tonunu (negatif/nötr/pozitif) puanla ve her biri için acil aksiyon maddeleri listele.",
+      },
+      {
+        title: "Yönetici Strateji Özeti",
+        description: "Teknik mimarilerin maliyet ve gizlilik karşılaştırması",
+        prompt: "Kurum içi GPU kümesi ile bulut yapay zeka API'lerinin maliyet, KVKK/GDPR veri gizliliği ve yanıt süresi (latency) açısından karşılaştırmalı yönetici özetini hazırla.",
+      },
+    ],
   },
 ];
 
@@ -51,6 +99,8 @@ export function PromptOptimizer() {
   const [editablePrompt, setEditablePrompt] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showRubricDetails, setShowRubricDetails] = useState<boolean>(false);
+  const [showSampleDropdown, setShowSampleDropdown] = useState<boolean>(false);
+  const [activeCategory, setActiveCategory] = useState<string>("FMCG (Hızlı Tüketim Ürünleri)");
 
   useEffect(() => {
     async function loadModels() {
@@ -179,55 +229,121 @@ export function PromptOptimizer() {
       </div>
 
       {/* Kontrol Şeridi & Örnek Promptlar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-[#0D1322] border border-[#1E293B] shadow-xl">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5 mr-1">
-            <FileText className="w-3.5 h-3.5 text-[#00E5FF]" />
-            Hızlı Doldur:
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {SAMPLE_PROMPTS.map((sample, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleUseSample(sample.prompt)}
-                className="px-3 py-1.5 rounded-lg bg-[#162032] hover:bg-[#1E293B] text-gray-300 hover:text-[#00E5FF] text-xs font-medium transition border border-[#1F293D] hover:border-[#00E5FF]/40 cursor-pointer shadow-sm"
-              >
-                {sample.title}
-              </button>
-            ))}
+      <div className="rounded-2xl bg-[#0D1322] border border-[#1E293B] shadow-xl overflow-hidden transition-all duration-300">
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4">
+          {/* Hızlı Doldur Açılır/Kapanır Tetikleyici Butonu */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowSampleDropdown(!showSampleDropdown)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#162032] to-[#1E293B] hover:from-[#1E293B] hover:to-[#27354F] text-white text-xs font-bold transition border border-[#00E5FF]/30 hover:border-[#00E5FF] shadow-sm cursor-pointer"
+            >
+              <ShoppingBag className="w-4 h-4 text-[#00E5FF]" />
+              <span>Hızlı Şablon Kütüphanesi</span>
+              <span className="px-1.5 py-0.5 text-[10px] rounded bg-[#00E5FF]/20 text-[#00E5FF] font-mono">FMCG +</span>
+              {showSampleDropdown ? (
+                <ChevronUp className="w-4 h-4 text-gray-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              )}
+            </button>
+            <span className="text-xs text-gray-400 hidden sm:inline">
+              FMCG, satış ve veri analizi hazır senaryoları
+            </span>
+          </div>
+
+          {/* Model Seçimi */}
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5 text-xs text-gray-300 font-medium">
+              <Cpu className="w-4 h-4 text-[#00E5FF]" />
+              <span>Model:</span>
+            </div>
+            <select
+              value={selectedModel}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedModel(val);
+                const matchedModel = models.find((m) => m.id === val);
+                if (matchedModel) {
+                  if (matchedModel.provider === "mock") setSelectedProvider("mock");
+                  else if (matchedModel.provider === "openrouter") setSelectedProvider("openrouter");
+                  else setSelectedProvider("ollama");
+                } else {
+                  setSelectedProvider(val === "mock" ? "mock" : "ollama");
+                }
+              }}
+              className="bg-[#162032] border border-[#1F293D] text-gray-200 text-xs font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#00E5FF] focus:border-[#00E5FF] cursor-pointer"
+            >
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.provider})
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Model Seçimi */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 text-xs text-gray-300 font-medium">
-            <Cpu className="w-4 h-4 text-[#00E5FF]" />
-            <span>Model:</span>
+        {/* Açılır / Kapanır Şablon Paneli */}
+        {showSampleDropdown && (
+          <div className="border-t border-[#1E293B] bg-[#0A0E1A]/80 p-5 space-y-4 animate-in slide-in-from-top-2 duration-200">
+            {/* Kategori Sekmeleri */}
+            <div className="flex flex-wrap gap-2 border-b border-[#1E293B] pb-3">
+              {SAMPLE_PROMPT_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.category}
+                  type="button"
+                  onClick={() => setActiveCategory(cat.category)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                    activeCategory === cat.category
+                      ? "bg-[#00E5FF]/15 text-[#00E5FF] border border-[#00E5FF]/50 shadow-sm"
+                      : "text-gray-400 hover:text-gray-200 hover:bg-[#162032] border border-transparent"
+                  }`}
+                >
+                  {cat.category.includes("FMCG") ? (
+                    <ShoppingBag className="w-3.5 h-3.5" />
+                  ) : (
+                    <TrendingUp className="w-3.5 h-3.5" />
+                  )}
+                  <span>{cat.category}</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#162032] font-mono">
+                    {cat.items.length}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Seçili Kategorinin Kartları */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {SAMPLE_PROMPT_CATEGORIES.find((c) => c.category === activeCategory)?.items.map((item, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => {
+                    handleUseSample(item.prompt);
+                    setShowSampleDropdown(false);
+                  }}
+                  className="p-3.5 rounded-xl bg-[#0D1322] hover:bg-[#141D30] border border-[#1E293B] hover:border-[#00E5FF]/50 transition-all duration-200 cursor-pointer group flex flex-col justify-between space-y-2 shadow-sm"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-white group-hover:text-[#00E5FF] transition flex items-center gap-1.5">
+                        <Tag className="w-3 h-3 text-[#00E5FF]" />
+                        {item.title}
+                      </h4>
+                      <ArrowRight className="w-3.5 h-3.5 text-gray-500 group-hover:text-[#00E5FF] transition group-hover:translate-x-0.5" />
+                    </div>
+                    <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2">
+                      {item.description}
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t border-[#1E293B]/60 flex items-center justify-between text-[10px] text-gray-500 font-mono">
+                    <span>Tıkla ve Doldur</span>
+                    <span className="text-[#00E5FF]/70">Hazır Senaryo</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <select
-            value={selectedModel}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSelectedModel(val);
-              const matchedModel = models.find((m) => m.id === val);
-              if (matchedModel) {
-                if (matchedModel.provider === "mock") setSelectedProvider("mock");
-                else if (matchedModel.provider === "openrouter") setSelectedProvider("openrouter");
-                else setSelectedProvider("ollama");
-              } else {
-                setSelectedProvider(val === "mock" ? "mock" : "ollama");
-              }
-            }}
-            className="bg-[#162032] border border-[#1F293D] text-gray-200 text-xs font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#00E5FF] focus:border-[#00E5FF] cursor-pointer"
-          >
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} ({m.provider})
-              </option>
-            ))}
-          </select>
-        </div>
+        )}
       </div>
 
       {/* Ana Çift Çalışma Alanı: Orijinal vs İyileştirilmiş */}
