@@ -98,6 +98,18 @@ function getClientClarificationQuestions(prompt: string): ClarifyQuestion[] {
   if (p.includes("excel") || p.includes("analiz") || p.includes("rapor") || p.includes("özetle") || p.includes("incele")) {
     return [
       {
+        id: "sector_domain",
+        question: "Bu analiz hangi sektör veya iş kolu için hazırlanıyor?",
+        options: [
+          "FMCG / Hızlı Tüketim & Dağıtım",
+          "Perakende, Mağazacılık & E-Ticaret",
+          "Üretim, Sanayi & Lojistik",
+          "Finans, Muhasebe & Bankacılık",
+          "Diğer (Özel Belirtin...)",
+        ],
+        allow_custom: true,
+      },
+      {
         id: "target_audience",
         question: "Analiz raporu hangi hedef kitle / yönetici düzeyine sunulacak?",
         options: [
@@ -105,7 +117,7 @@ function getClientClarificationQuestions(prompt: string): ClarifyQuestion[] {
           "Operasyonel / Saha Ekibi (Detaylı Maddeler & KPI'lar)",
           "Teknik & Analitik Uzman Ekip (Ham Metrikler & Formüller)",
         ],
-        allow_custom: true,
+        allow_custom: false,
       },
       {
         id: "focus_metric",
@@ -115,7 +127,7 @@ function getClientClarificationQuestions(prompt: string): ClarifyQuestion[] {
           "Operasyonel Hız ve Süreç İyileştirmeleri",
           "Satış Büyümesi, Karlılık & Müşteri Trendleri",
         ],
-        allow_custom: true,
+        allow_custom: false,
       },
       {
         id: "output_structure",
@@ -133,6 +145,17 @@ function getClientClarificationQuestions(prompt: string): ClarifyQuestion[] {
   if (p.includes("çıkar") || p.includes("ayıkla") || p.includes("çek") || p.includes("parse") || p.includes("bul")) {
     return [
       {
+        id: "sector_domain",
+        question: "Bu veri hangi sektör veya iş alanına ait?",
+        options: [
+          "FMCG / Dağıtım & Bayi Siparişleri",
+          "Finans & Muhasebe / Fatura & Ekstre",
+          "E-Ticaret / Müşteri Sipariş & Kargo",
+          "Diğer (Özel Belirtin...)",
+        ],
+        allow_custom: true,
+      },
+      {
         id: "target_format",
         question: "Ayıklanan verinin sunum formatı ne olsun?",
         options: ["JSON Şeması (Katı ve Yapılandırılmış)", "Markdown Tablosu", "Virgülle Ayrılmış CSV / Liste"],
@@ -144,33 +167,32 @@ function getClientClarificationQuestions(prompt: string): ClarifyQuestion[] {
         options: ["'null' ata (Asla tahmin etme / uydurma)", "Eksik alanları ayrı bir uyarı listesinde bildir"],
         allow_custom: false,
       },
-      {
-        id: "domain_context",
-        question: "Hangi sektör / iş alanı hedefleniyor?",
-        options: ["FMCG / Dağıtım & Bayi Siparişleri", "Finans & Muhasebe / Fatura & Ekstre", "Müşteri Hizmetleri / Çağrı Kayıtları"],
-        allow_custom: true,
-      },
     ];
   }
 
   if (p.includes("kod") || p.includes("python") || p.includes("script") || p.includes("yazılım") || p.includes("sql")) {
     return [
       {
+        id: "sector_domain",
+        question: "Kodun çalışacağı iş / uygulama alanı nedir?",
+        options: [
+          "Veri Mühendisliği & ETL / Otomasyon",
+          "Web & API Geliştirme (Fullstack)",
+          "Yapay Zeka & Makine Öğrenimi",
+          "Diğer (Özel Belirtin...)",
+        ],
+        allow_custom: true,
+      },
+      {
         id: "programming_language",
         question: "Hedeflenen programlama dili ve ortamı nedir?",
         options: ["Python (Modern 3.11+ / Tip Korumalı)", "TypeScript / Node.js", "SQL / Veritabanı Sorgusu"],
-        allow_custom: true,
+        allow_custom: false,
       },
       {
         id: "error_handling",
         question: "Hata yönetimi ve sınır durumlar (edge-cases) nasıl ele alınsın?",
         options: ["Kapsamlı Try-Catch ve loglama blokları ile", "Minimum bağımlılık ve saf kod yapısı ile"],
-        allow_custom: false,
-      },
-      {
-        id: "code_quality",
-        question: "Kodun öncelikli odak noktası nedir?",
-        options: ["Temiz, modüler ve dökümante edilmiş kod", "Yüksek performans ve asenkron hız"],
         allow_custom: false,
       },
     ];
@@ -179,10 +201,21 @@ function getClientClarificationQuestions(prompt: string): ClarifyQuestion[] {
   // Genel Amaçlı Görevler
   return [
     {
+      id: "sector_domain",
+      question: "Bu görev hangi sektör veya uzmanlık alanı ile ilgili?",
+      options: [
+        "Kurumsal Yönetim & Strateji",
+        "Pazarlama, Satış & İletişim",
+        "İnsan Kaynakları & Operasyon",
+        "Diğer (Özel Belirtin...)",
+      ],
+      allow_custom: true,
+    },
+    {
       id: "operational_role",
       question: "Yapay zekanın üstlenmesini istediğiniz uzman rolü nedir?",
       options: ["Kıdemli Strateji & Yönetim Danışmanı", "Uzman Veri ve İş Analisti", "Teknik Çözüm Mimarı"],
-      allow_custom: true,
+      allow_custom: false,
     },
     {
       id: "output_structure",
@@ -209,6 +242,7 @@ export function PromptOptimizer() {
   // Etkileşimli Bağlam Soruları State'leri
   const [clarifyQuestions, setClarifyQuestions] = useState<ClarifyQuestion[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+  const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({});
   const [isClarifying, setIsClarifying] = useState<boolean>(false);
   const [showClarifyModal, setShowClarifyModal] = useState<boolean>(false);
 
@@ -312,10 +346,18 @@ export function PromptOptimizer() {
     setShowClarifyModal(false);
 
     try {
+      // Özel 'Diğer' alanında yazılan metinleri seçilen cevapla birleştir
+      const resolvedAnswers: Record<string, string> = { ...answersToUse };
+      Object.keys(resolvedAnswers).forEach((key) => {
+        if (resolvedAnswers[key]?.includes("Diğer") && customAnswers[key]?.trim()) {
+          resolvedAnswers[key] = `Özel Belirtilen Sektör/Alan: ${customAnswers[key].trim()}`;
+        }
+      });
+
       // PromptCowboy STOK (Situation, Task, Objective, Knowledge/Format) yaklaşımıyla promptu zenginleştir
       let promptToSend = inputPrompt;
-      if (answersToUse && Object.keys(answersToUse).length > 0) {
-        const contextLines = Object.entries(answersToUse).map(([k, v]) => `• ${v}`).join("\n");
+      if (resolvedAnswers && Object.keys(resolvedAnswers).length > 0) {
+        const contextLines = Object.entries(resolvedAnswers).map(([k, v]) => `• ${v}`).join("\n");
         promptToSend = `${inputPrompt}\n\n[KULLANICI TERCİHLERİ VE OPERASYONEL BAĞLAM]:\n${contextLines}`;
       }
 
@@ -751,6 +793,29 @@ export function PromptOptimizer() {
                       );
                     })}
                   </div>
+
+                  {/* 'Diğer' Seçildiğinde Açılan Özel Sektör Metin Kutusu */}
+                  {selectedAnswers[q.id]?.includes("Diğer") && (
+                    <div className="pt-2 animate-in fade-in duration-150">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Edit3 className="w-3.5 h-3.5 text-[#00E5FF]" />
+                        <span className="text-[11px] font-semibold text-gray-300">
+                          Lütfen sektörünüzü veya uzmanlık alanınızı yazın:
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        value={customAnswers[q.id] || ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomAnswers((prev) => ({ ...prev, [q.id]: val }));
+                        }}
+                        placeholder="Örn: Otomotiv Yan Sanayi, Medikal Sağlık, Gayrimenkul, Turizm..."
+                        className="w-full bg-[#0D1424] border border-[#00E5FF]/40 rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#00E5FF] focus:border-[#00E5FF]"
+                        autoFocus
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
