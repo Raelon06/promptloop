@@ -91,8 +91,8 @@ const SAMPLE_PROMPT_CATEGORIES: SampleCategory[] = [
 
 export function PromptOptimizer() {
   const [inputPrompt, setInputPrompt] = useState<string>("");
-  const [selectedModel, setSelectedModel] = useState<string>("qwen3:4b");
-  const [selectedProvider, setSelectedProvider] = useState<"ollama" | "mock" | "openrouter">("ollama");
+  const [selectedModel, setSelectedModel] = useState<string>("openrouter/free");
+  const [selectedProvider, setSelectedProvider] = useState<"ollama" | "mock" | "openrouter">("openrouter");
   const [models, setModels] = useState<ModelCapability[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [result, setResult] = useState<OptimizeResponse | null>(null);
@@ -156,7 +156,7 @@ export function PromptOptimizer() {
     try {
       // 1. Önce soruları getir
       const clarifyData = await clarifyPrompt(inputPrompt);
-      if (clarifyData.questions && clarifyData.questions.length > 0) {
+      if (clarifyData && clarifyData.questions && clarifyData.questions.length > 0) {
         setClarifyQuestions(clarifyData.questions);
         // Varsayılan olarak ilk şıkkı seç
         const initialAnswers: Record<string, string> = {};
@@ -170,8 +170,9 @@ export function PromptOptimizer() {
         setIsClarifying(false);
         return;
       }
-    } catch {
-      // Soru alma başarısız olursa doğrudan optimizasyona geç
+    } catch (e) {
+      // Render henüz güncellenmediyse veya endpoint yoksa hata fırlatma, doğrudan optimizasyona geç
+      console.warn("Clarification endpoint unavailable, bypassing to direct optimization:", e);
     }
     setIsClarifying(false);
     executeOptimization({});
