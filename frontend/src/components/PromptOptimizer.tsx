@@ -49,6 +49,7 @@ export function PromptOptimizer() {
   const [copied, setCopied] = useState<boolean>(false);
 
   // 🎯 ADAPTIVE PROMPT IMPROVEMENT PANEL STATE'LERİ
+  // Kural: SADECE ilk optimizasyon başarılı olduktan sonra açılır!
   const [adaptiveQuestions, setAdaptiveQuestions] = useState<ClarifyQuestion[]>([]);
   const [adaptiveAnswers, setAdaptiveAnswers] = useState<Record<string, string>>({});
   const [isAnalyzingQuestions, setIsAnalyzingQuestions] = useState<boolean>(false);
@@ -57,9 +58,6 @@ export function PromptOptimizer() {
   // Doğrulanmış Çalışan Geçmiş (History) State'leri
   const [promptHistory, setPromptHistory] = useState<HistoryItem[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
-
-  // Debounce ref
-  const clarifyDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sayfa açılışında geçmişi localStorage'dan güvenle yükle
   useEffect(() => {
@@ -114,12 +112,8 @@ export function PromptOptimizer() {
     loadModels();
   }, []);
 
-  // Kullanıcı prompt girdiğinde dinamik soruları arka planda çek (Debounced 500ms)
-  const triggerClarificationAnalysis = async (promptText: string) => {
-    if (!promptText.trim() || promptText.trim().length < 5) {
-      setAdaptiveQuestions([]);
-      return;
-    }
+  // Optimize edildikten sonra dinamik soruları arka planda çek
+  const fetchClarificationQuestions = async (promptText: string) => {
     setIsAnalyzingQuestions(true);
     try {
       const clarifyData = await clarifyPrompt(promptText.trim(), "auto");
@@ -127,14 +121,14 @@ export function PromptOptimizer() {
         setAdaptiveQuestions(clarifyData.questions);
       }
     } catch {
-      // Hata durumunda güvenli fallback soruları
+      // Hata durumunda güvenli ve kaliteli fallback soruları
       setAdaptiveQuestions([
         {
-          id: "operational_role",
+          id: "writing_style",
           question: "Yazı stiline veya uzmanlık rolüne uyum sağla",
           priority: "critical",
           helper_text: "Modelin üstlenmesini istediğin uzmanlık tonu veya yazı dili nedir?",
-          options: ["Kıdemli ve profesyonel uzman", "Samimi ve doğrudan", "Analitik ve akademik"],
+          options: ["Kıdemli ve profesyonel lider tonu", "Samimi ve doğrudan anlatım", "Analitik ve akademik derinlik"],
           allow_custom: true,
           category: "role",
         },
@@ -152,7 +146,7 @@ export function PromptOptimizer() {
           question: "Çıktı formatı ve şablonu nasıl olsun?",
           priority: "medium",
           helper_text: "Çıktının sunum ve aktarım biçimini belirler.",
-          options: ["Yapılandırılmış Markdown Tablosu", "Yönetici Özeti + Maddeler", "Yalın Metin"],
+          options: ["Yapılandırılmış Markdown Tablosu", "Yönetici Özeti + Aksiyon Maddeleri", "Yalın Metin"],
           allow_custom: true,
           category: "format",
         },
@@ -160,16 +154,6 @@ export function PromptOptimizer() {
     } finally {
       setIsAnalyzingQuestions(false);
     }
-  };
-
-  const handleInputChange = (text: string) => {
-    setInputPrompt(text);
-    if (clarifyDebounceRef.current) {
-      clearTimeout(clarifyDebounceRef.current);
-    }
-    clarifyDebounceRef.current = setTimeout(() => {
-      triggerClarificationAnalysis(text);
-    }, 600);
   };
 
   // Optimizasyon Motoru
@@ -221,6 +205,11 @@ export function PromptOptimizer() {
       setResult(data);
       setEditablePrompt(data.improved_prompt);
 
+      // İlk defa optimize edildiyse, hemen ardından soruları analiz et ve sol paneli aç
+      if (!isReTweak && adaptiveQuestions.length === 0) {
+        fetchClarificationQuestions(inputPrompt.trim());
+      }
+
       // Geçmişe kaydet
       try {
         const historyItem: HistoryItem = {
@@ -249,7 +238,7 @@ export function PromptOptimizer() {
     }
   };
 
-  // Soru cevaplandığında canlı olarak promptu güncelle
+  // Soru cevaplandığında canlı olarak sağdaki Harika Prompt'u güncelle
   const handleAnswerChange = (questionId: string, answer: string) => {
     const updatedAnswers = { ...adaptiveAnswers };
     if (!answer) {
@@ -259,10 +248,8 @@ export function PromptOptimizer() {
     }
     setAdaptiveAnswers(updatedAnswers);
 
-    // Prompt hazırsa hemen canlı olarak yeniden optimize et
-    if (result || inputPrompt.trim().length >= 5) {
-      handleOptimize(updatedAnswers);
-    }
+    // Prompt optimize edilmişse anında geliştirilmiş sonucu üret
+    handleOptimize(updatedAnswers);
   };
 
   const handleSkipQuestion = (questionId: string) => {
@@ -305,6 +292,9 @@ export function PromptOptimizer() {
     activeModelObj?.status === "ready" ||
     selectedProvider === "openrouter" ||
     selectedProvider === "mock";
+
+  // Prompt optimize edildikten sonra sol panel görünür olur
+  const hasOptimizedResult = Boolean(result);
 
   return (
     <div className="w-full min-h-screen flex flex-col bg-[#07090E] text-[#EDEDED]">
@@ -377,67 +367,84 @@ export function PromptOptimizer() {
         </div>
       </header>
 
-      {/* 2. MOBİL GEÇİŞ BUTONU (Sorular vs Stüdyo) */}
-      <div className="lg:hidden max-w-7xl mx-auto px-4 pt-3 w-full">
-        <div className="grid grid-cols-2 p-1 bg-[#0A0D15] border border-[#141A27] rounded-xl text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setMobileTab("studio")}
-            className={`py-1.5 rounded-lg transition ${
-              mobileTab === "studio"
-                ? "bg-[#00E5FF] text-[#060913]"
-                : "text-[#94A3B8] hover:text-white"
-            }`}
-          >
-            Prompt Stüdyo
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileTab("questions")}
-            className={`py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
-              mobileTab === "questions"
-                ? "bg-[#00E5FF] text-[#060913]"
-                : "text-[#94A3B8] hover:text-white"
-            }`}
-          >
-            <span>Prompt&apos;unu Geliştir</span>
-            {adaptiveQuestions.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/20">
-                {adaptiveQuestions.length}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* 3. ANA ÇALIŞMA ALANI (SOL: PROMPT'UNU GELİŞTİR PANELİ | SAĞ: ÇİFT EDİTÖR) */}
-      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 flex-1 flex flex-col">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 items-start">
-          
-          {/* SOL PANEL: PROMPT'UNU GELİŞTİR (Referans Tasarım: promptcowboy) */}
-          <div
-            className={`lg:col-span-4 xl:col-span-4 flex flex-col space-y-4 ${
-              mobileTab === "questions" ? "block" : "hidden lg:flex"
-            }`}
-          >
-            <AdaptiveImprovementPanel
-              questions={adaptiveQuestions}
-              answers={adaptiveAnswers}
-              onAnswerChange={handleAnswerChange}
-              onSkipQuestion={handleSkipQuestion}
-              onReanalyze={() => triggerClarificationAnalysis(inputPrompt)}
-              isAnalyzing={isAnalyzingQuestions}
-            />
+      {/* 2. MOBİL GEÇİŞ BUTONU (Sadece Sonuç Varsa Görünür) */}
+      {hasOptimizedResult && (
+        <div className="lg:hidden max-w-7xl mx-auto px-4 pt-3 w-full">
+          <div className="grid grid-cols-2 p-1 bg-[#0A0D15] border border-[#141A27] rounded-xl text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setMobileTab("studio")}
+              className={`py-1.5 rounded-lg transition ${
+                mobileTab === "studio"
+                  ? "bg-[#00E5FF] text-[#060913]"
+                  : "text-[#94A3B8] hover:text-white"
+              }`}
+            >
+              Prompt Stüdyo
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab("questions")}
+              className={`py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
+                mobileTab === "questions"
+                  ? "bg-[#00E5FF] text-[#060913]"
+                  : "text-[#94A3B8] hover:text-white"
+              }`}
+            >
+              <span>Prompt&apos;unu Geliştir</span>
+              {adaptiveQuestions.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/20">
+                  {adaptiveQuestions.length}
+                </span>
+              )}
+            </button>
           </div>
+        </div>
+      )}
 
-          {/* SAĞ PANEL: TEMBEL PROMPT & HARİKA PROMPT (8 Kolon) */}
+      {/* 3. ANA ÇALIŞMA ALANI */}
+      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 flex-1 flex flex-col">
+        <div
+          className={`grid gap-5 flex-1 items-start transition-all duration-300 ${
+            hasOptimizedResult
+              ? "grid-cols-1 lg:grid-cols-12"
+              : "grid-cols-1 lg:grid-cols-2"
+          }`}
+        >
+          {/* 🎯 SOL PANEL: PROMPT'UNU GELİŞTİR (YALNIZCA OPTİMİZE SONUÇ GELDİKTEN SONRA AÇILIR) */}
+          {hasOptimizedResult && (
+            <div
+              className={`lg:col-span-4 xl:col-span-4 flex flex-col space-y-4 animate-in fade-in slide-in-from-left-4 duration-300 ${
+                mobileTab === "questions" ? "block" : "hidden lg:flex"
+              }`}
+            >
+              <AdaptiveImprovementPanel
+                questions={adaptiveQuestions}
+                answers={adaptiveAnswers}
+                onAnswerChange={handleAnswerChange}
+                onSkipQuestion={handleSkipQuestion}
+                onReanalyze={() => fetchClarificationQuestions(inputPrompt)}
+                isAnalyzing={isAnalyzingQuestions}
+              />
+            </div>
+          )}
+
+          {/* SAĞ ALAN: TEMBEL PROMPT & HARİKA PROMPT */}
           <div
-            className={`lg:col-span-8 xl:col-span-8 flex flex-col space-y-4 ${
-              mobileTab === "studio" ? "block" : "hidden lg:flex"
-            }`}
+            className={`flex flex-col space-y-4 ${
+              hasOptimizedResult
+                ? "lg:col-span-8 xl:col-span-8"
+                : "lg:col-span-2"
+            } ${mobileTab === "studio" ? "block" : "hidden lg:flex"}`}
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 items-stretch">
-              {/* SOL İÇ PANEL: ORİJİNAL PROMPT (Tembel Prompt) */}
+            <div
+              className={`grid gap-4 flex-1 items-stretch ${
+                hasOptimizedResult
+                  ? "grid-cols-1 md:grid-cols-2"
+                  : "grid-cols-1 md:grid-cols-2"
+              }`}
+            >
+              {/* SOL İÇ PANEL: TEMBEL PROMPT */}
               <div className="flex flex-col rounded-xl bg-[#0B0E17] border border-[#161D2C] hover:border-[#222C42] transition p-4 sm:p-5 space-y-3">
                 <div className="flex items-center justify-between border-b border-[#141A27] pb-2.5">
                   <div className="flex items-center gap-2">
@@ -462,8 +469,8 @@ export function PromptOptimizer() {
                 <div className="flex-1 flex flex-col min-h-[260px] sm:min-h-[360px]">
                   <textarea
                     value={inputPrompt}
-                    onChange={(e) => handleInputChange(e.target.value)}
-                    placeholder="Ham promptunu buraya yaz (ör. 'linkedin gönderisi yaz', 'exceldeki eksik stokları listele', 'python ile veri çek')..."
+                    onChange={(e) => setInputPrompt(e.target.value)}
+                    placeholder="Ham promptunu buraya yaz (ör. 'linkedin gönderisi planlamak istiyorum excel ile ilgili', 'python ile veri çek')..."
                     className="w-full flex-1 bg-transparent text-[#F1F5F9] placeholder-[#475569] text-xs sm:text-sm focus:outline-none resize-none prompt-editor leading-relaxed"
                     spellCheck={false}
                   />
@@ -549,7 +556,7 @@ export function PromptOptimizer() {
                         <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#07090E]/60 backdrop-blur-xs rounded-xl">
                           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0E131F] border border-[#00E5FF]/40 text-[#00E5FF] text-xs font-medium shadow-lg">
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Cevabınızla güncelleniyor...</span>
+                            <span>Cevabınızla geliştiriliyor...</span>
                           </div>
                         </div>
                       )}
@@ -565,7 +572,7 @@ export function PromptOptimizer() {
                     <div className="pt-2 border-t border-[#141A27] flex items-center justify-between">
                       <span className="text-[11px] text-[#64748B] flex items-center gap-1.5">
                         <Edit3 className="w-3 h-3" />
-                        <span>Sol panelden soruları yanıtlayarak anında geliştirebilirsiniz</span>
+                        <span>Sol paneldeki soruları yanıtlayarak promptu daha da keskinleştirebilirsiniz</span>
                       </span>
 
                       <button
@@ -604,7 +611,7 @@ export function PromptOptimizer() {
                         Henüz optimize edilmiş prompt yok
                       </p>
                       <p className="text-[11px] text-[#64748B] leading-relaxed">
-                        Sol alana bir prompt girin ve <strong>Promptu Optimize Et</strong> butonuna tıklayın. Sol paneldeki sorularla promptunuzu derinleştirebilirsiniz.
+                        Sol alana bir prompt girin ve <strong>Promptu Optimize Et</strong> butonuna tıklayın. Sonuç geldiğinde sol panelde promptunuzu geliştirecek özel sorular açılacaktır.
                       </p>
                     </div>
                   </div>
