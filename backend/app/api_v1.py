@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .providers import MockProvider, ProviderFailure, ProviderResult, get_provider
 from .rate_limiter import limiter
 from .security import preflight
+from .analytics import record_request, get_admin_metrics
 from .studio import (
     FieldType,
     RequestedField,
@@ -209,6 +210,22 @@ def _check_ollama_status() -> tuple[bool, list[str]]:
             return True, models
     except Exception:
         return False, []
+
+
+# Admin Giriş Şifresi / PIN (Varsayılan: promptloop2026, ENV ile ezilebilir)
+ADMIN_SECRET_KEY = os.environ.get("PROMPTLOOP_ADMIN_KEY", "promptloop2026")
+
+
+@router.post("/admin/metrics")
+def get_admin_stats(payload: dict, req: Request):
+    """Admin paneli için korumalı istatistikler ve son istek dökümü."""
+    provided_key = payload.get("secret_key", "")
+    if provided_key != ADMIN_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Geçersiz Admin Anahtarı. Erişim reddedildi.",
+        )
+    return get_admin_metrics(limit=payload.get("limit", 50))
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -505,6 +522,18 @@ def optimize_prompt(request: PromptOptimizeRequest, req: Request):
             f"[5. ÇIKTI BİÇİMİ VE ŞABLONU]\n"
             f"Standart Markdown başlıkları, özet bulgular ve aksiyon maddeleri içeren yapılandırılmış rapor."
         )
+        # Mock isteğini kaydet
+        client_ip = req.client.host if req.client else "unknown"
+        record_request(
+            run_id=rid,
+            ip=client_ip,
+            endpoint="/prompts/optimize",
+            task_type=detected_task,
+            model_id=request.model_id,
+            prompt=request.prompt,
+            status="SUCCESS"
+        )
+
         return PromptOptimizeResponse(
             run_id=rid,
             status="PLAN_READY",
@@ -562,6 +591,18 @@ def optimize_prompt(request: PromptOptimizeRequest, req: Request):
         detected_task = plan.task_type
         rubric = heuristic_rubric(request.prompt, detected_task)
 
+        # Mock isteğini kaydet
+        client_ip = req.client.host if req.client else "unknown"
+        record_request(
+            run_id=rid,
+            ip=client_ip,
+            endpoint="/prompts/optimize",
+            task_type=detected_task,
+            model_id=request.model_id,
+            prompt=request.prompt,
+            status="SUCCESS"
+        )
+
         return PromptOptimizeResponse(
             run_id=rid,
             status="PLAN_READY",
@@ -597,6 +638,18 @@ def optimize_prompt(request: PromptOptimizeRequest, req: Request):
             "- Çıktıyı açık, anlaşılır ve başlıklarla yapılandırılmış formatta sun.\n"
             "- Belirsiz veya çelişkili durumlarda varsayım yapma; durumu açıkça bildir."
         )
+        # Mock isteğini kaydet
+        client_ip = req.client.host if req.client else "unknown"
+        record_request(
+            run_id=rid,
+            ip=client_ip,
+            endpoint="/prompts/optimize",
+            task_type=detected_task,
+            model_id=request.model_id,
+            prompt=request.prompt,
+            status="SUCCESS"
+        )
+
         return PromptOptimizeResponse(
             run_id=rid,
             status="NEEDS_REVIEW",
