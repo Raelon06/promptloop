@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { CopyButton } from "./CopyButton";
 import { optimizePrompt, fetchModels, clarifyPrompt } from "../lib/api";
-import { OptimizeResponse, ModelCapability, TaskType, ClarifyQuestion } from "../lib/types";
+import { OptimizeResponse, ModelCapability, TaskType, ClarifyQuestion, OptimizeRequest } from "../lib/types";
 
 interface SampleCategory {
   category: string;
@@ -184,13 +184,18 @@ export function PromptOptimizer() {
     setShowClarifyModal(false);
 
     try {
-      const data = await optimizePrompt({
+      const payload: OptimizeRequest = {
         prompt: inputPrompt,
         provider: selectedProvider,
         model_id: selectedModel,
         preserve_language: true,
-        context_answers: answersToUse,
-      });
+      };
+      // Yalnızca cevap varsa ekle
+      if (answersToUse && Object.keys(answersToUse).length > 0) {
+        payload.context_answers = answersToUse;
+      }
+
+      const data = await optimizePrompt(payload);
 
       setResult(data);
       setEditablePrompt(data.improved_prompt);

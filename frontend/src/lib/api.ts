@@ -49,7 +49,10 @@ export async function optimizePrompt(payload: OptimizeRequest): Promise<Optimize
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => null);
-    throw new Error(errorBody?.detail || `Optimization request failed (${res.status})`);
+    const detailMsg = typeof errorBody?.detail === "string" 
+      ? errorBody.detail 
+      : (Array.isArray(errorBody?.detail) ? errorBody.detail.map((e: { msg?: string }) => e.msg).join(", ") : null);
+    throw new Error(detailMsg || `Optimization request failed (${res.status})`);
   }
   return res.json();
 }
