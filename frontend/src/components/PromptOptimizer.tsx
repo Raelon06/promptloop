@@ -214,8 +214,11 @@ export function PromptOptimizer() {
         provider: selectedProvider,
         model_id: selectedModel,
         preserve_language: true,
-        context_answers: Object.fromEntries(validAnswers),
       };
+
+      if (validAnswers.length > 0) {
+        payload.context_answers = Object.fromEntries(validAnswers);
+      }
 
       const data = await optimizePrompt(payload);
 

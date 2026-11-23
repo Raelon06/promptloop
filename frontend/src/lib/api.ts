@@ -39,12 +39,25 @@ export async function clarifyPrompt(prompt: string, taskType: string = "auto"): 
 }
 
 export async function optimizePrompt(payload: OptimizeRequest): Promise<OptimizeResponse> {
+  // Render'daki mevcut ve yeni backend sürümleriyle %100 uyumluluk için
+  // Eğer context_answers boş ise payload'a hiç eklemiyoruz (extra="forbid" hatasını önler)
+  const cleanPayload: Record<string, unknown> = {
+    prompt: payload.prompt,
+    provider: payload.provider || "openrouter",
+    model_id: payload.model_id || "openrouter/free",
+    preserve_language: payload.preserve_language ?? true,
+  };
+
+  if (payload.context_answers && Object.keys(payload.context_answers).length > 0) {
+    cleanPayload.context_answers = payload.context_answers;
+  }
+
   const res = await fetch(`${API_BASE_URL}/api/v1/prompts/optimize`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(cleanPayload),
   });
 
   if (!res.ok) {
