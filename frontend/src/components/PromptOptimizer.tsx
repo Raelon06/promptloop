@@ -22,6 +22,9 @@ import {
   PackageCheck,
   Tag,
   Warehouse,
+  History,
+  Bookmark,
+  Trash2,
 } from "lucide-react";
 import { CopyButton } from "./CopyButton";
 import { optimizePrompt, fetchModels, clarifyPrompt } from "../lib/api";
@@ -89,6 +92,107 @@ const SAMPLE_PROMPT_CATEGORIES: SampleCategory[] = [
   },
 ];
 
+function getClientClarificationQuestions(prompt: string): ClarifyQuestion[] {
+  const p = prompt.toLowerCase();
+
+  if (p.includes("excel") || p.includes("analiz") || p.includes("rapor") || p.includes("özetle") || p.includes("incele")) {
+    return [
+      {
+        id: "target_audience",
+        question: "Analiz raporu hangi hedef kitle / yönetici düzeyine sunulacak?",
+        options: [
+          "C-Level / Üst Düzey Yönetici Özeti (Kısa & Net Aksiyonlar)",
+          "Operasyonel / Saha Ekibi (Detaylı Maddeler & KPI'lar)",
+          "Teknik & Analitik Uzman Ekip (Ham Metrikler & Formüller)",
+        ],
+        allow_custom: true,
+      },
+      {
+        id: "focus_metric",
+        question: "Analizde öne çıkarılacak ana öncelik nedir?",
+        options: [
+          "Maliyet, Bütçe ve Finansal Riskler",
+          "Operasyonel Hız ve Süreç İyileştirmeleri",
+          "Satış Büyümesi, Karlılık & Müşteri Trendleri",
+        ],
+        allow_custom: true,
+      },
+      {
+        id: "output_structure",
+        question: "Raporun sunum ve çıktı düzeni nasıl olsun?",
+        options: [
+          "Özet Yönetici Notu + Önceliklendirilmiş Acil Aksiyon Tablosu",
+          "Standart Markdown Başlıkları ve Madde İşaretleri",
+          "Bulgular, Riskler ve Fırsatlar Matrisi",
+        ],
+        allow_custom: false,
+      },
+    ];
+  }
+
+  if (p.includes("çıkar") || p.includes("ayıkla") || p.includes("çek") || p.includes("parse") || p.includes("bul")) {
+    return [
+      {
+        id: "target_format",
+        question: "Ayıklanan verinin sunum formatı ne olsun?",
+        options: ["JSON Şeması (Katı ve Yapılandırılmış)", "Markdown Tablosu", "Virgülle Ayrılmış CSV / Liste"],
+        allow_custom: false,
+      },
+      {
+        id: "missing_data_policy",
+        question: "Metinde yer almayan eksik alanlar nasıl yönetilsin?",
+        options: ["'null' ata (Asla tahmin etme / uydurma)", "Eksik alanları ayrı bir uyarı listesinde bildir"],
+        allow_custom: false,
+      },
+      {
+        id: "domain_context",
+        question: "Hangi sektör / iş alanı hedefleniyor?",
+        options: ["FMCG / Dağıtım & Bayi Siparişleri", "Finans & Muhasebe / Fatura & Ekstre", "Müşteri Hizmetleri / Çağrı Kayıtları"],
+        allow_custom: true,
+      },
+    ];
+  }
+
+  if (p.includes("kod") || p.includes("python") || p.includes("script") || p.includes("yazılım") || p.includes("sql")) {
+    return [
+      {
+        id: "programming_language",
+        question: "Hedeflenen programlama dili ve ortamı nedir?",
+        options: ["Python (Modern 3.11+ / Tip Korumalı)", "TypeScript / Node.js", "SQL / Veritabanı Sorgusu"],
+        allow_custom: true,
+      },
+      {
+        id: "error_handling",
+        question: "Hata yönetimi ve sınır durumlar (edge-cases) nasıl ele alınsın?",
+        options: ["Kapsamlı Try-Catch ve loglama blokları ile", "Minimum bağımlılık ve saf kod yapısı ile"],
+        allow_custom: false,
+      },
+      {
+        id: "code_quality",
+        question: "Kodun öncelikli odak noktası nedir?",
+        options: ["Temiz, modüler ve dökümante edilmiş kod", "Yüksek performans ve asenkron hız"],
+        allow_custom: false,
+      },
+    ];
+  }
+
+  // Genel Amaçlı Görevler
+  return [
+    {
+      id: "operational_role",
+      question: "Yapay zekanın üstlenmesini istediğiniz uzman rolü nedir?",
+      options: ["Kıdemli Strateji & Yönetim Danışmanı", "Uzman Veri ve İş Analisti", "Teknik Çözüm Mimarı"],
+      allow_custom: true,
+    },
+    {
+      id: "output_structure",
+      question: "Çıktının yapısal düzeni nasıl olmalıdır?",
+      options: ["Başlıklar ve madde işaretli maddeler", "Standart Markdown tablosu", "Yalın ve akıcı profesyonel metin"],
+      allow_custom: false,
+    },
+  ];
+}
+
 export function PromptOptimizer() {
   const [inputPrompt, setInputPrompt] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("openrouter/free");
@@ -107,6 +211,20 @@ export function PromptOptimizer() {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
   const [isClarifying, setIsClarifying] = useState<boolean>(false);
   const [showClarifyModal, setShowClarifyModal] = useState<boolean>(false);
+
+  // Prompt Geçmişi State'leri (PromptCowboy Kütüphane Özelliği)
+  const [promptHistory, setPromptHistory] = useState<{ id: string; original: string; improved: string; date: string; taskType: string }[]>([]);
+  const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Tarayıcı hafızasından geçmişi yükle
+    try {
+      const saved = localStorage.getItem("promptloop_history");
+      if (saved) {
+        setPromptHistory(JSON.parse(saved));
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     async function loadModels() {
@@ -153,27 +271,37 @@ export function PromptOptimizer() {
     setErrorMessage(null);
     setIsClarifying(true);
 
+    let questionsToAsk: ClarifyQuestion[] = [];
+
     try {
-      // 1. Önce soruları getir
+      // 1. Önce sunucudan dinamik soruları almayı dene
       const clarifyData = await clarifyPrompt(inputPrompt);
       if (clarifyData && clarifyData.questions && clarifyData.questions.length > 0) {
-        setClarifyQuestions(clarifyData.questions);
-        // Varsayılan olarak ilk şıkkı seç
-        const initialAnswers: Record<string, string> = {};
-        clarifyData.questions.forEach((q: ClarifyQuestion) => {
-          if (q.options && q.options.length > 0) {
-            initialAnswers[q.id] = q.options[0];
-          }
-        });
-        setSelectedAnswers(initialAnswers);
-        setShowClarifyModal(true);
-        setIsClarifying(false);
-        return;
+        questionsToAsk = clarifyData.questions;
       }
-    } catch (e) {
-      // Render henüz güncellenmediyse veya endpoint yoksa hata fırlatma, doğrudan optimizasyona geç
-      console.warn("Clarification endpoint unavailable, bypassing to direct optimization:", e);
+    } catch {
+      // Sunucu henüz hazır değilse yedek soru setini devreye al
     }
+
+    // Sunucudan gelmediyse istemci tarafındaki akıllı soru üreticiyi kullan
+    if (questionsToAsk.length === 0) {
+      questionsToAsk = getClientClarificationQuestions(inputPrompt);
+    }
+
+    if (questionsToAsk.length > 0) {
+      setClarifyQuestions(questionsToAsk);
+      const initialAnswers: Record<string, string> = {};
+      questionsToAsk.forEach((q: ClarifyQuestion) => {
+        if (q.options && q.options.length > 0) {
+          initialAnswers[q.id] = q.options[0];
+        }
+      });
+      setSelectedAnswers(initialAnswers);
+      setShowClarifyModal(true);
+      setIsClarifying(false);
+      return;
+    }
+
     setIsClarifying(false);
     executeOptimization({});
   };
@@ -184,21 +312,38 @@ export function PromptOptimizer() {
     setShowClarifyModal(false);
 
     try {
+      // PromptCowboy STOK (Situation, Task, Objective, Knowledge/Format) yaklaşımıyla promptu zenginleştir
+      let promptToSend = inputPrompt;
+      if (answersToUse && Object.keys(answersToUse).length > 0) {
+        const contextLines = Object.entries(answersToUse).map(([k, v]) => `• ${v}`).join("\n");
+        promptToSend = `${inputPrompt}\n\n[KULLANICI TERCİHLERİ VE OPERASYONEL BAĞLAM]:\n${contextLines}`;
+      }
+
       const payload: OptimizeRequest = {
-        prompt: inputPrompt,
+        prompt: promptToSend,
         provider: selectedProvider,
         model_id: selectedModel,
         preserve_language: true,
       };
-      // Yalnızca cevap varsa ekle
-      if (answersToUse && Object.keys(answersToUse).length > 0) {
-        payload.context_answers = answersToUse;
-      }
 
       const data = await optimizePrompt(payload);
 
       setResult(data);
       setEditablePrompt(data.improved_prompt);
+
+      // Geçmişe kaydet (PromptCowboy Kütüphane / Bellek Yaklaşımı)
+      try {
+        const historyItem = {
+          id: Date.now().toString(),
+          original: inputPrompt,
+          improved: data.improved_prompt,
+          date: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+          taskType: data.task_type,
+        };
+        const updated = [historyItem, ...promptHistory.slice(0, 19)];
+        setPromptHistory(updated);
+        localStorage.setItem("promptloop_history", JSON.stringify(updated));
+      } catch {}
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Prompt optimizasyonu sırasında bir hata oluştu";
       setErrorMessage(message);
@@ -292,6 +437,19 @@ export function PromptOptimizer() {
             <span className="text-xs text-gray-400 hidden sm:inline">
               FMCG, satış ve veri analizi hazır senaryoları
             </span>
+            <button
+              type="button"
+              onClick={() => setShowHistoryModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#162032] hover:bg-[#1E293B] text-gray-300 hover:text-white text-xs font-semibold border border-[#1F293D] transition cursor-pointer ml-1"
+            >
+              <History className="w-3.5 h-3.5 text-[#00E5FF]" />
+              <span>Geçmiş</span>
+              {promptHistory.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-[#00E5FF]/20 text-[#00E5FF] text-[10px] font-mono">
+                  {promptHistory.length}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Model Seçimi */}
@@ -717,6 +875,80 @@ export function PromptOptimizer() {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {/* Prompt Geçmişi Modal Penceresi (PromptCowboy Kütüphane Yaklaşımı) */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl bg-[#0D1322] border border-[#00E5FF]/40 rounded-2xl shadow-2xl p-6 sm:p-7 space-y-6 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-[#1E293B] pb-4">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-[#00E5FF]" />
+                <h3 className="text-lg font-black text-white">Prompt Optimizasyon Geçmişi</h3>
+              </div>
+              {promptHistory.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPromptHistory([]);
+                    localStorage.removeItem("promptloop_history");
+                  }}
+                  className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Geçmişi Temizle</span>
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+              {promptHistory.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 text-xs">
+                  Henüz kaydedilmiş bir prompt geçmişi bulunmuyor.
+                </div>
+              ) : (
+                promptHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-3.5 rounded-xl bg-[#080D1A] border border-[#1E293B] hover:border-[#00E5FF]/40 transition space-y-2"
+                  >
+                    <div className="flex items-center justify-between text-[11px] text-gray-400">
+                      <span className="px-2 py-0.5 rounded bg-[#162032] text-[#00E5FF] font-mono">
+                        {item.taskType}
+                      </span>
+                      <span>{item.date}</span>
+                    </div>
+                    <p className="text-xs text-gray-300 font-mono line-clamp-2">
+                      {item.original}
+                    </p>
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-[#1E293B]/60">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInputPrompt(item.original);
+                          setEditablePrompt(item.improved);
+                          setShowHistoryModal(false);
+                        }}
+                        className="text-[11px] font-semibold text-[#00E5FF] hover:underline cursor-pointer"
+                      >
+                        Tekrar Yükle & Düzenle
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end border-t border-[#1E293B] pt-4">
+              <button
+                type="button"
+                onClick={() => setShowHistoryModal(false)}
+                className="px-5 py-2 rounded-xl bg-[#162032] hover:bg-[#1E293B] text-gray-200 text-xs font-semibold cursor-pointer"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
