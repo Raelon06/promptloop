@@ -164,14 +164,14 @@ export function PromptOptimizer() {
         sectorText = customSector.trim();
       }
 
-      // STOK bağlamı oluştur
-      const contextLines = [
-        `• Hedeflenen Sektör / İş Alanı: ${sectorText}`,
-        `• Hedef Kitle Düzeyi: ${audienceToUse}`,
-        `• İstenen Çıktı Biçimi: ${formatToUse}`,
-      ].join("\n");
+      // Modelin doğrudan anlayacağı net talimat bağlamı
+      let promptToSend = inputPrompt.trim();
+      const hasSector = sectorText && sectorText !== "Genel / Evrensel";
+      const hasAudience = audienceToUse && audienceToUse !== "Genel / Karma Kitle";
 
-      const promptToSend = `${inputPrompt}\n\n[KULLANICI TERCİHLERİ VE OPERASYONEL BAĞLAM]:\n${contextLines}`;
+      if (hasSector || hasAudience) {
+        promptToSend = `Sen ${hasSector ? sectorText + " alanında" : ""} ${hasAudience ? "ve " + audienceToUse + " düzeyinde" : ""} uzman bir yapay zekâ asistanısın.\n\nGÖREV:\n${inputPrompt.trim()}\n\nUZMANLIK VE HEDEF KİTLE KISITLARI:\n• Sektör / İş Alanı: ${sectorText}\n• Hedef Kitle: ${audienceToUse}\n• Çıktı Biçimi: ${formatToUse}`;
+      }
 
       const payload: OptimizeRequest = {
         prompt: promptToSend,
