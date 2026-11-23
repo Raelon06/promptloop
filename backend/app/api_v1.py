@@ -156,6 +156,9 @@ class ClarifyQuestion(BaseModel):
     question: str
     options: list[str]
     allow_custom: bool = True
+    priority: Literal["critical", "high", "medium"] = "high"
+    helper_text: str | None = None
+    category: Literal["role", "context", "task", "format"] = "context"
 
 
 class ClarifyResponse(BaseModel):
@@ -328,6 +331,8 @@ def clarify_prompt(request: ClarifyRequest, req: Request):
     if security_errors:
         return ClarifyResponse(task_type="other", questions=[])
 
+    p_lower = request.prompt.casefold()
+
     task_type: TaskType = (
         _detect_task_type_heuristic(request.prompt)
         if request.task_type == "auto"
@@ -336,102 +341,197 @@ def clarify_prompt(request: ClarifyRequest, req: Request):
 
     questions: list[ClarifyQuestion] = []
     
-    # Görev türüne göre özelleştirilmiş 2-3 derinleştirici bağlam sorusu
-    if task_type == "data_extraction":
+    # 1. LinkedIn & Sosyal Medya / İçerik
+    if any(k in p_lower for k in ("linkedin", "gönderi", "post", "tweet", "içerik", "makale", "yazı")):
+        if not any(k in p_lower for k in ("stil", "tarz", "örnek")):
+            questions.append(
+                ClarifyQuestion(
+                    id="writing_style",
+                    question="Yazı stiline uyum sağla",
+                    helper_text="Daha önce yazdığın birkaç örnek yapıştır, mümkünse aynı türden bir iş olsun.",
+                    priority="critical",
+                    category="role",
+                    options=["Profesyonel ve lider tonu", "Samimi ve hikaye anlatımlı", "Doğrudan ve vurucu"],
+                    allow_custom=True,
+                )
+            )
+        if not any(k in p_lower for k in ("kitle", "okuyucu", "hedef kitle", "yönetici", "c-level")):
+            questions.append(
+                ClarifyQuestion(
+                    id="target_audience",
+                    question="Bu gönderiyi kim okuyacak?",
+                    helper_text="Hedef kitleyi bilmek, gönderinin dilini, derinliğini ve çağrısını doğrudan şekillendirir.",
+                    priority="high",
+                    category="context",
+                    options=["İş dünyası liderleri & C-Level", "Sektör profesyonelleri & girişimciler", "Genel iş ağı & iş arayanlar"],
+                    allow_custom=True,
+                )
+            )
+        if not any(k in p_lower for k in ("ton", "üslup", "ses")):
+            questions.append(
+                ClarifyQuestion(
+                    id="content_tone",
+                    question="Gönderinin tonu nasıl olmalı?",
+                    helper_text="Ton, gönderinin LinkedIn'de nasıl algılanacağını belirler ve yazımı buna göre ayarlar.",
+                    priority="high",
+                    category="role",
+                    options=["İlham verici ve merak uyandırıcı", "Objektif ve analitik", "Eğitici ve adım adım rehber"],
+                    allow_custom=True,
+                )
+            )
+        if not any(k in p_lower for k in ("kelime", "uzun", "kısa", "paragraf")):
+            questions.append(
+                ClarifyQuestion(
+                    id="content_length",
+                    question="Gönderi ne kadar uzun olmalı?",
+                    helper_text="Uzunluk, dikkat çekme ve okunma oranını etkiler; hedefe uygun bir format seçmemi sağlar.",
+                    priority="medium",
+                    category="format",
+                    options=["Kısa & Vurucu (100-150 kelime)", "Standart (150-250 kelime)", "Detaylı Makale / Vaka Analizi"],
+                    allow_custom=True,
+                )
+            )
+    # 2. Veri Analizi, Excel, SQL & Raporlama
+    elif task_type == "analysis" or any(k in p_lower for k in ("excel", "tablo", "veri", "stok", "rapor", "metrik")):
+        if not any(k in p_lower for k in ("fmcg", "e-ticaret", "perakende", "finans", "üretim", "lojistik", "sağlık")):
+            questions.append(
+                ClarifyQuestion(
+                    id="industry_sector",
+                    question="Hangi sektör veya iş alanına ait?",
+                    helper_text="Sektörel KPI'ları ve terminolojiyi (örn. stok devir hızı, fire oranı) doğru kurgulamayı sağlar.",
+                    priority="critical",
+                    category="context",
+                    options=["FMCG / Hızlı Tüketim & Dağıtım", "E-Ticaret & Perakende", "Finans & Muhasebe", "Üretim & Lojistik"],
+                    allow_custom=True,
+                )
+            )
+        if not any(k in p_lower for k in ("c-level", "yönetici", "saha", "teknik", "operasyon")):
+            questions.append(
+                ClarifyQuestion(
+                    id="target_audience",
+                    question="Rapor hangi karar vericiye sunulacak?",
+                    helper_text="Üst yöneticiye kısa aksiyon özeti mi, yoksa operasyonel sahaya detaylı liste mi istendiğini belirler.",
+                    priority="high",
+                    category="context",
+                    options=["C-Level / Üst Düzey Yönetici Özeti", "Operasyonel & Saha Ekibi", "Teknik & Finansal Analist"],
+                    allow_custom=True,
+                )
+            )
+        if not any(k in p_lower for k in ("format", "tablo", "markdown", "liste", "şablon")):
+            questions.append(
+                ClarifyQuestion(
+                    id="output_structure",
+                    question="Çıktı formatı ve şablonu nasıl olsun?",
+                    helper_text="Verinin doğrudan sunuma mı yoksa bir sisteme mi aktarılacağını belirler.",
+                    priority="high",
+                    category="format",
+                    options=["Standart Markdown Tablosu", "Yönetici Özeti + Kritik Risk Listesi", "CSV / Ham Liste Formatı"],
+                    allow_custom=True,
+                )
+            )
+        questions.append(
+            ClarifyQuestion(
+                id="missing_data_rule",
+                question="Eksik veya belirsiz veri olduğunda ne yapılsın?",
+                helper_text="Yapay zekanın halüsinasyon yapmasını önler; doğrulanmamış sayı uydurmasını engeller.",
+                priority="medium",
+                category="task",
+                options=["Eksik alanları açıkça uyar ve tahmin etme", "En yakın rasyonel varsayımı parantez içinde belirt", "Yalnızca kesin verileri listele"],
+                allow_custom=False,
+            )
+        )
+    # 3. Kodlama ve Yazılım Geliştirme
+    elif task_type == "code":
+        if not any(k in p_lower for k in ("python", "typescript", "javascript", "react", "next", "sql", "go", "rust", "bash")):
+            questions.append(
+                ClarifyQuestion(
+                    id="programming_language",
+                    question="Hangi dil ve framework hedefleniyor?",
+                    helper_text="En güncel kütüphane ve modern dil standartlarını seçmek için gereklidir.",
+                    priority="critical",
+                    category="task",
+                    options=["Python 3.11+ (FastAPI / Pandas)", "TypeScript / Next.js 15 (React)", "SQL (PostgreSQL / SQLite)", "Node.js (Backend)"],
+                    allow_custom=True,
+                )
+            )
+        questions.append(
+            ClarifyQuestion(
+                id="error_handling",
+                question="Hata ve sınır durum (edge-case) yönetimi nasıl olsun?",
+                helper_text="Production kalitesinde güvenli ve dayanıklı kod üretilmesini sağlar.",
+                priority="high",
+                category="task",
+                options=["Kapsamlı try/except ve loglama ile", "Birim testleri (Unit tests) ile birlikte", "Minimal ve sade kod blokları ile"],
+                allow_custom=False,
+            )
+        )
+        questions.append(
+            ClarifyQuestion(
+                id="code_style",
+                question="Kod çıktısı nasıl sunulmalı?",
+                helper_text="Yorum satırları ve dokümantasyon derinliğini belirler.",
+                priority="medium",
+                category="format",
+                options=["Açıklamalı ve tip korumalı eksiksiz dosya", "Yalnızca optimize edilmiş fonksiyon bloğu", "Adım adım kurulum ve çalıştırma talimatı"],
+                allow_custom=True,
+            )
+        )
+    # 4. Veri Ayıklama (Data Extraction)
+    elif task_type == "data_extraction":
         questions = [
             ClarifyQuestion(
                 id="target_format",
-                question="Ayıklanan verinin hangi formatta sunulmasını istersiniz?",
-                options=["JSON Şeması (Standart)", "Markdown Tablosu", "Virgülle Ayrılmış CSV / Liste", "Özet Rapor"],
+                question="Ayıklanan verinin sunum formatı ne olsun?",
+                helper_text="Formatın diğer yazılımlara entegre edilebilirliğini belirler.",
+                priority="critical",
+                category="format",
+                options=["Katı JSON Şeması", "Markdown Tablosu", "Virgülle Ayrılmış CSV"],
                 allow_custom=True,
             ),
             ClarifyQuestion(
                 id="missing_data_policy",
                 question="Metinde bulunamayan eksik alanlar nasıl yönetilsin?",
-                options=["'null' veya boş değer ata (Kesinlikle tahmin etme)", "Eksik alanları uyarı olarak listele", "En makul tahmini parantez içinde belirt"],
-                allow_custom=False,
-            ),
-            ClarifyQuestion(
-                id="domain_context",
-                question="Bu veri hangi sektöre / alana ait?",
-                options=["FMCG / Sipariş & Dağıtım", "Finans & Muhasebe / Fatura", "Müşteri Destek / Çağrı Kaydı", "Genel / Diğer"],
-                allow_custom=True,
-            ),
-        ]
-    elif task_type == "code":
-        questions = [
-            ClarifyQuestion(
-                id="programming_language",
-                question="Hangi dil veya kütüphane ekosistemi hedefleniyor?",
-                options=["Python (Modern 3.11+ / Tip Destekli)", "TypeScript / JavaScript (Next.js/React)", "SQL / Veritabanı Sorgusu", "Bash / Shell Betiği"],
-                allow_custom=True,
-            ),
-            ClarifyQuestion(
-                id="error_handling",
-                question="Hata yönetimi ve sınır durumlar (edge-cases) nasıl ele alınsın?",
-                options=["Ayrıntılı Try-Catch ve loglama blokları ile", "Minimum bağımlılık ve saf kod yapısı ile", "Birim testleri (Unit tests) ile birlikte"],
-                allow_custom=False,
-            ),
-            ClarifyQuestion(
-                id="performance_focus",
-                question="Kodun öncelikli odak noktası nedir?",
-                options=["Temiz, okunabilir ve belgelendirilmiş kod", "Yüksek performans ve asenkron hız", "Gelişmiş tip güvenliği ve modülerlik"],
-                allow_custom=True,
-            ),
-        ]
-    elif task_type == "analysis":
-        questions = [
-            ClarifyQuestion(
-                id="target_audience",
-                question="Analiz raporu hangi kitle veya yönetici düzeyine sunulacak?",
-                options=["C-Level / Üst Düzey Yönetici Özeti (Kısa & Net Aksiyonlar)", "Operasyonel / Saha Ekibi (Detaylı Maddeler)", "Teknik & Analitik Uzman Ekip"],
-                allow_custom=True,
-            ),
-            ClarifyQuestion(
-                id="focus_metric",
-                question="Analizde öne çıkarılacak ana metrik veya kriter nedir?",
-                options=["Maliyet, Bütçe ve Finansal Riskler", "Operasyonel Hız ve Süreç İyileştirmeleri", "Müşteri Memnuniyeti & Kalite"],
-                allow_custom=True,
-            ),
-            ClarifyQuestion(
-                id="actionable_recommendations",
-                question="Raporun sonunda stratejik aksiyon adımları yer alsın mı?",
-                options=["Evet, önceliklendirilmiş acil aksiyon planı eklensin", "Hayır, yalnızca objektif mevcut durum özeti sunulsun"],
+                helper_text="Halüsinasyonu sıfırlayarak uydurma değer üretilmesini engeller.",
+                priority="high",
+                category="task",
+                options=["'null' ata ve kesinlikle uydurma", "Eksik alanları uyarı olarak listele"],
                 allow_custom=False,
             ),
         ]
-    elif task_type == "creative":
-        questions = [
-            ClarifyQuestion(
-                id="tone_and_voice",
-                question="Metnin tonu ve anlatım dili nasıl olmalıdır?",
-                options=["Kurumsal, profesyonel ve güven verici", "Samimi, enerjik ve ikna edici", "Edebi, merak uyandırıcı ve yaratıcı"],
-                allow_custom=True,
-            ),
-            ClarifyQuestion(
-                id="length_constraint",
-                question="İstenen çıktı uzunluğu nedir?",
-                options=["Kısa ve vurucu (1-2 paragraf / 150 kelime)", "Orta uzunlukta (3-5 paragraf)", "Detaylı ve kapsamlı uzun metin"],
-                allow_custom=True,
-            ),
-        ]
+    # 5. Genel Amaçlı
     else:
         questions = [
             ClarifyQuestion(
                 id="operational_role",
-                question="Yapay zekanın üstlenmesini istediğiniz uzman rolü nedir?",
-                options=["Kıdemli Strateji & Yönetim Danışmanı", "Uzman Yazılım Mimarı / Veri Mühendisi", "Pazarlama ve Müşteri Deneyimi Yöneticisi"],
+                question="Yapay zekanın üstlenmesini istediğin rol nedir?",
+                helper_text="Modelin hangi uzmanlık şapkası ve deneyim seviyesiyle yanıt vereceğini belirler.",
+                priority="critical",
+                category="role",
+                options=["Kıdemli Strateji ve Yönetim Danışmanı", "Uzman Ürün Yöneticisi ve Tasarımcı", "Veri Analitiği ve Teknoloji Lideri"],
+                allow_custom=True,
+            ),
+            ClarifyQuestion(
+                id="target_audience",
+                question="Çıktıyı kim veya hangi ekip değerlendirecek?",
+                helper_text="İçeriğin derinlik ve teknik jargon seviyesini belirler.",
+                priority="high",
+                category="context",
+                options=["Üst Yönetim & Karar Vericiler", "Teknik ve Operasyon Ekibi", "Genel Müşteri / Son Kullanıcı"],
                 allow_custom=True,
             ),
             ClarifyQuestion(
                 id="output_structure",
-                question="Çıktının yapısal düzeni nasıl olmalıdır?",
-                options=["Başlıklar ve madde işaretli maddeler", "Standart Markdown tablosu", "Yalın ve akıcı nesir metni"],
+                question="Nasıl bir yapısal format bekliyorsun?",
+                helper_text="Çıktının doğrudan kopyalanıp kullanılabilirliğini sağlar.",
+                priority="medium",
+                category="format",
+                options=["Başlıklar ve madde işaretli liste", "Standart Markdown tablosu", "Yalın nesir metni"],
                 allow_custom=True,
             ),
         ]
 
-    return ClarifyResponse(task_type=task_type, questions=questions)
+    # En fazla 4 soruya sınırla
+    return ClarifyResponse(task_type=task_type, questions=questions[:4])
 
 
 @router.post("/prompts/analyze", response_model=PromptAnalyzeResponse)

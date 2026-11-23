@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
   ArrowRight,
@@ -14,18 +14,17 @@ import {
   AlertCircle,
   ChevronDown,
   X,
-  SlidersHorizontal,
   RefreshCw,
-  Building2,
-  Users,
-  FileCode,
+  SlidersHorizontal,
 } from "lucide-react";
-import { optimizePrompt, fetchModels } from "../lib/api";
+import { optimizePrompt, fetchModels, clarifyPrompt } from "../lib/api";
 import {
   OptimizeResponse,
   ModelCapability,
+  ClarifyQuestion,
   OptimizeRequest,
 } from "../lib/types";
+import { AdaptiveImprovementPanel } from "./AdaptiveImprovementPanel";
 
 interface HistoryItem {
   id: string;
@@ -34,29 +33,6 @@ interface HistoryItem {
   date: string;
   taskType: string;
 }
-
-const SECTOR_OPTIONS = [
-  "Genel / Evrensel",
-  "FMCG / Hızlı Tüketim",
-  "E-Ticaret & Perakende",
-  "Finans & Muhasebe",
-  "Teknoloji & Yazılım",
-  "Diğer (Özel)",
-];
-
-const AUDIENCE_OPTIONS = [
-  "C-Level / Üst Yönetim",
-  "Operasyon & Saha Ekibi",
-  "Teknik & Analitik Ekip",
-  "Müşteri / Son Kullanıcı",
-];
-
-const OUTPUT_FORMAT_OPTIONS = [
-  "Yapılandırılmış Rapor",
-  "Markdown Tablosu",
-  "Madde İşaretleri",
-  "JSON Şeması",
-];
 
 export function PromptOptimizer() {
   const [inputPrompt, setInputPrompt] = useState<string>("");
@@ -72,15 +48,18 @@ export function PromptOptimizer() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
 
-  // Canlı Bağlam & İnce Ayar State'leri (Sayfa Üzerinde Doğrudan)
-  const [selectedSector, setSelectedSector] = useState<string>("Genel / Evrensel");
-  const [customSector, setCustomSector] = useState<string>("");
-  const [selectedAudience, setSelectedAudience] = useState<string>("C-Level / Üst Yönetim");
-  const [selectedFormat, setSelectedFormat] = useState<string>("Yapılandırılmış Rapor");
+  // 🎯 ADAPTIVE PROMPT IMPROVEMENT PANEL STATE'LERİ
+  const [adaptiveQuestions, setAdaptiveQuestions] = useState<ClarifyQuestion[]>([]);
+  const [adaptiveAnswers, setAdaptiveAnswers] = useState<Record<string, string>>({});
+  const [isAnalyzingQuestions, setIsAnalyzingQuestions] = useState<boolean>(false);
+  const [mobileTab, setMobileTab] = useState<"questions" | "studio">("studio");
 
   // Doğrulanmış Çalışan Geçmiş (History) State'leri
   const [promptHistory, setPromptHistory] = useState<HistoryItem[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
+
+  // Debounce ref
+  const clarifyDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sayfa açılışında geçmişi localStorage'dan güvenle yükle
   useEffect(() => {
@@ -135,12 +114,66 @@ export function PromptOptimizer() {
     loadModels();
   }, []);
 
-  // Doğrudan optimize et (Modal yok)
-  const handleOptimize = async (
-    overrideSector?: string,
-    overrideAudience?: string,
-    overrideFormat?: string
-  ) => {
+  // Kullanıcı prompt girdiğinde dinamik soruları arka planda çek (Debounced 500ms)
+  const triggerClarificationAnalysis = async (promptText: string) => {
+    if (!promptText.trim() || promptText.trim().length < 5) {
+      setAdaptiveQuestions([]);
+      return;
+    }
+    setIsAnalyzingQuestions(true);
+    try {
+      const clarifyData = await clarifyPrompt(promptText.trim(), "auto");
+      if (clarifyData?.questions && clarifyData.questions.length > 0) {
+        setAdaptiveQuestions(clarifyData.questions);
+      }
+    } catch {
+      // Hata durumunda güvenli fallback soruları
+      setAdaptiveQuestions([
+        {
+          id: "operational_role",
+          question: "Yazı stiline veya uzmanlık rolüne uyum sağla",
+          priority: "critical",
+          helper_text: "Modelin üstlenmesini istediğin uzmanlık tonu veya yazı dili nedir?",
+          options: ["Kıdemli ve profesyonel uzman", "Samimi ve doğrudan", "Analitik ve akademik"],
+          allow_custom: true,
+          category: "role",
+        },
+        {
+          id: "target_audience",
+          question: "Bu çıktıyı kim okuyacak veya değerlendirecek?",
+          priority: "high",
+          helper_text: "Hedef kitleyi bilmek çıktının terminolojisini ve derinliğini doğrudan şekillendirir.",
+          options: ["C-Level & Üst Düzey Yönetim", "Saha & Operasyon Ekibi", "Genel Müşteri & Son Kullanıcı"],
+          allow_custom: true,
+          category: "context",
+        },
+        {
+          id: "output_format",
+          question: "Çıktı formatı ve şablonu nasıl olsun?",
+          priority: "medium",
+          helper_text: "Çıktının sunum ve aktarım biçimini belirler.",
+          options: ["Yapılandırılmış Markdown Tablosu", "Yönetici Özeti + Maddeler", "Yalın Metin"],
+          allow_custom: true,
+          category: "format",
+        },
+      ]);
+    } finally {
+      setIsAnalyzingQuestions(false);
+    }
+  };
+
+  const handleInputChange = (text: string) => {
+    setInputPrompt(text);
+    if (clarifyDebounceRef.current) {
+      clearTimeout(clarifyDebounceRef.current);
+    }
+    clarifyDebounceRef.current = setTimeout(() => {
+      triggerClarificationAnalysis(text);
+    }, 600);
+  };
+
+  // Optimizasyon Motoru
+  const handleOptimize = async (overrideAnswers?: Record<string, string>) => {
     if (!inputPrompt.trim() || inputPrompt.trim().length < 5) {
       setErrorMessage("Lütfen optimize etmek için en az 5 karakterden oluşan bir prompt yazın.");
       return;
@@ -155,22 +188,25 @@ export function PromptOptimizer() {
     setErrorMessage(null);
 
     try {
-      const sectorToUse = overrideSector !== undefined ? overrideSector : selectedSector;
-      const audienceToUse = overrideAudience !== undefined ? overrideAudience : selectedAudience;
-      const formatToUse = overrideFormat !== undefined ? overrideFormat : selectedFormat;
+      const answersToUse = overrideAnswers || adaptiveAnswers;
+      
+      // Cevapları prompt bağlamına formatla
+      const validAnswers = Object.entries(answersToUse).filter(
+        ([, v]) => v && v !== "__SKIPPED__"
+      );
 
-      let sectorText = sectorToUse;
-      if (sectorToUse === "Diğer (Özel)" && customSector.trim()) {
-        sectorText = customSector.trim();
-      }
-
-      // Modelin doğrudan anlayacağı net talimat bağlamı
       let promptToSend = inputPrompt.trim();
-      const hasSector = sectorText && sectorText !== "Genel / Evrensel";
-      const hasAudience = audienceToUse && audienceToUse !== "Genel / Karma Kitle";
 
-      if (hasSector || hasAudience) {
-        promptToSend = `Sen ${hasSector ? sectorText + " alanında" : ""} ${hasAudience ? "ve " + audienceToUse + " düzeyinde" : ""} uzman bir yapay zekâ asistanısın.\n\nGÖREV:\n${inputPrompt.trim()}\n\nUZMANLIK VE HEDEF KİTLE KISITLARI:\n• Sektör / İş Alanı: ${sectorText}\n• Hedef Kitle: ${audienceToUse}\n• Çıktı Biçimi: ${formatToUse}`;
+      if (validAnswers.length > 0) {
+        const contextLines = validAnswers
+          .map(([qId, ans]) => {
+            const questionObj = adaptiveQuestions.find((q) => q.id === qId);
+            const label = questionObj?.question || qId;
+            return `• ${label}: ${ans}`;
+          })
+          .join("\n");
+
+        promptToSend = `${inputPrompt.trim()}\n\n[KULLANICI TERCİHLERİ VE OPERASYONEL BAĞLAM]:\n${contextLines}`;
       }
 
       const payload: OptimizeRequest = {
@@ -178,6 +214,7 @@ export function PromptOptimizer() {
         provider: selectedProvider,
         model_id: selectedModel,
         preserve_language: true,
+        context_answers: Object.fromEntries(validAnswers),
       };
 
       const data = await optimizePrompt(payload);
@@ -195,7 +232,7 @@ export function PromptOptimizer() {
             hour: "2-digit",
             minute: "2-digit",
           }),
-          taskType: sectorText !== "Genel / Evrensel" ? sectorText : (data.task_type || "Genel"),
+          taskType: data.task_type || "Genel",
         };
         const updated = [historyItem, ...promptHistory.slice(0, 24)];
         setPromptHistory(updated);
@@ -211,6 +248,30 @@ export function PromptOptimizer() {
       setIsLoading(false);
       setIsTweaking(false);
     }
+  };
+
+  // Soru cevaplandığında canlı olarak promptu güncelle
+  const handleAnswerChange = (questionId: string, answer: string) => {
+    const updatedAnswers = { ...adaptiveAnswers };
+    if (!answer) {
+      delete updatedAnswers[questionId];
+    } else {
+      updatedAnswers[questionId] = answer;
+    }
+    setAdaptiveAnswers(updatedAnswers);
+
+    // Prompt hazırsa hemen canlı olarak yeniden optimize et
+    if (result || inputPrompt.trim().length >= 5) {
+      handleOptimize(updatedAnswers);
+    }
+  };
+
+  const handleSkipQuestion = (questionId: string) => {
+    const updatedAnswers = {
+      ...adaptiveAnswers,
+      [questionId]: "__SKIPPED__",
+    };
+    setAdaptiveAnswers(updatedAnswers);
   };
 
   const handleCopy = async () => {
@@ -236,6 +297,8 @@ export function PromptOptimizer() {
     setResult(null);
     setEditablePrompt("");
     setErrorMessage(null);
+    setAdaptiveAnswers({});
+    setAdaptiveQuestions([]);
   };
 
   const activeModelObj = models.find((m) => m.id === selectedModel);
@@ -248,67 +311,65 @@ export function PromptOptimizer() {
     <div className="w-full min-h-screen flex flex-col bg-[#07090E] text-[#EDEDED]">
       {/* 1. ÜST BAR: Minimal Marka, Model Seçici & Durum, Geçmiş */}
       <header className="w-full border-b border-[#141925] bg-[#0A0D14]/80 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-[#0E1522] border border-[#00E5FF]/30 flex items-center justify-center text-[#00E5FF] font-black text-xs">
-              PL
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+          {/* Sol: Minimal Marka */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#00E5FF] to-[#0099FF] flex items-center justify-center shadow-sm shadow-[#00E5FF]/20">
+              <Sparkles className="w-4 h-4 text-[#07090E]" />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm tracking-tight text-white">
-                Prompt<span className="text-[#00E5FF]">Loop</span>
-              </span>
-              <span className="text-[11px] font-medium text-[#64748B] hidden sm:inline">
-                / Studio
-              </span>
-            </div>
+            <span className="font-bold text-sm tracking-tight text-white">
+              Prompt<span className="text-[#00E5FF]">Loop</span>
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#161D2B] text-[#94A3B8] border border-[#212A3D] hidden sm:inline-block">
+              Studio
+            </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <div className="relative flex items-center">
+          {/* Sağ: Model Seçici & Geçmiş */}
+          <div className="flex items-center gap-3">
+            {/* Model Seçici */}
+            <div className="relative flex items-center bg-[#0B0E17] border border-[#1C2538] hover:border-[#2A3752] rounded-lg px-2.5 py-1.5 text-xs transition">
+              <span
+                className={`w-2 h-2 rounded-full mr-2 transition-colors ${
+                  isModelOnline ? "bg-emerald-400" : "bg-rose-500 animate-pulse"
+                }`}
+                title={isModelOnline ? "Model Aktif ve Hazır" : "Bağlantı Bekleniyor"}
+              />
+              <Cpu className="w-3.5 h-3.5 text-[#00E5FF] mr-1.5 opacity-80" />
               <select
                 value={selectedModel}
                 onChange={(e) => {
-                  const val = e.target.value;
-                  setSelectedModel(val);
-                  const matched = models.find((m) => m.id === val);
-                  if (matched) {
-                    if (matched.provider === "mock") setSelectedProvider("mock");
-                    else if (matched.provider === "openrouter")
+                  const modelId = e.target.value;
+                  setSelectedModel(modelId);
+                  const found = models.find((m) => m.id === modelId);
+                  if (found) {
+                    if (found.provider === "mock") setSelectedProvider("mock");
+                    else if (found.provider === "openrouter")
                       setSelectedProvider("openrouter");
                     else setSelectedProvider("ollama");
                   }
                 }}
-                className="appearance-none bg-[#0E131F] hover:bg-[#131A2B] border border-[#1C2538] hover:border-[#2D3B59] text-xs text-[#E2E8F0] font-medium rounded-lg pl-8 pr-7 py-1.5 focus:outline-none focus:border-[#00E5FF] transition cursor-pointer"
+                className="bg-transparent text-xs text-[#E2E8F0] focus:outline-none cursor-pointer pr-4 font-medium appearance-none"
               >
                 {models.map((m) => (
-                  <option key={m.id} value={m.id} className="bg-[#0A0D14] text-white">
+                  <option key={m.id} value={m.id} className="bg-[#0B0E17] text-white">
                     {m.name}
                   </option>
                 ))}
               </select>
-              <Cpu className="w-3.5 h-3.5 text-[#00E5FF] absolute left-2.5 pointer-events-none" />
-              <ChevronDown className="w-3.5 h-3.5 text-[#64748B] absolute right-2 pointer-events-none" />
+              <ChevronDown className="w-3 h-3 text-[#64748B] pointer-events-none absolute right-2" />
             </div>
 
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#0E131F] border border-[#1C2538] text-[11px] font-mono text-[#94A3B8]">
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  isModelOnline ? "bg-emerald-400" : "bg-rose-400"
-                }`}
-              />
-              <span>{isModelOnline ? "Bağlı" : "Çevrimdışı"}</span>
-            </div>
-
+            {/* Geçmiş Butonu */}
             <button
               type="button"
               onClick={() => setShowHistoryModal(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0E131F] hover:bg-[#131A2B] border border-[#1C2538] text-xs text-[#94A3B8] hover:text-white transition cursor-pointer"
-              title="Önceki optimizasyon geçmişinizi görüntüleyin"
+              className="flex items-center gap-1.5 bg-[#0B0E17] hover:bg-[#121826] border border-[#1C2538] hover:border-[#2A3752] text-[#94A3B8] hover:text-white rounded-lg px-2.5 py-1.5 text-xs transition cursor-pointer"
             >
               <History className="w-3.5 h-3.5 text-[#00E5FF]" />
-              <span className="hidden md:inline">Geçmiş</span>
+              <span className="hidden sm:inline">Geçmiş</span>
               {promptHistory.length > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#1C2538] text-[#00E5FF] font-mono">
+                <span className="text-[10px] font-mono px-1 rounded bg-[#00E5FF]/20 text-[#00E5FF]">
                   {promptHistory.length}
                 </span>
               )}
@@ -317,299 +378,240 @@ export function PromptOptimizer() {
         </div>
       </header>
 
-      {/* 2. KOMPAKT ÜST BAŞLIK */}
-      <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-[#141925] pb-3">
-          <div>
-            <h1 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
-              <span>Prompt Studio</span>
-            </h1>
-            <p className="text-xs text-[#64748B]">
-              Promptunu yaz, tek tıkla optimize et ve dilediğin sektör/hedef kitleye göre canlı olarak geliştir.
-            </p>
-          </div>
-          <div className="text-[11px] text-[#475569] font-mono self-start sm:self-auto">
-            {inputPrompt.length > 0 ? `${inputPrompt.length} karakter` : "Hazır"}
-          </div>
+      {/* 2. MOBİL GEÇİŞ BUTONU (Sorular vs Stüdyo) */}
+      <div className="lg:hidden max-w-7xl mx-auto px-4 pt-3 w-full">
+        <div className="grid grid-cols-2 p-1 bg-[#0A0D15] border border-[#141A27] rounded-xl text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setMobileTab("studio")}
+            className={`py-1.5 rounded-lg transition ${
+              mobileTab === "studio"
+                ? "bg-[#00E5FF] text-[#060913]"
+                : "text-[#94A3B8] hover:text-white"
+            }`}
+          >
+            Prompt Stüdyo
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("questions")}
+            className={`py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
+              mobileTab === "questions"
+                ? "bg-[#00E5FF] text-[#060913]"
+                : "text-[#94A3B8] hover:text-white"
+            }`}
+          >
+            <span>Prompt&apos;unu Geliştir</span>
+            {adaptiveQuestions.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/20">
+                {adaptiveQuestions.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
-      {/* 3. ANA ÇALIŞMA ALANI */}
-      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-10 flex-1 flex flex-col">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 items-stretch">
-          {/* SOL PANEL: ORİJİNAL PROMPT EDİTÖRÜ */}
-          <div className="flex flex-col rounded-xl bg-[#0B0E17] border border-[#161D2C] hover:border-[#222C42] transition p-4 sm:p-5 space-y-3">
-            <div className="flex items-center justify-between border-b border-[#141A27] pb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#00E5FF]" />
-                <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Orijinal Prompt
-                </h2>
-              </div>
-              {inputPrompt && (
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="text-[11px] text-[#64748B] hover:text-[#E2E8F0] transition inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  Temizle
-                </button>
-              )}
-            </div>
-
-            {/* Metin Alanı */}
-            <div className="flex-1 flex flex-col min-h-[300px] sm:min-h-[420px]">
-              <textarea
-                value={inputPrompt}
-                onChange={(e) => setInputPrompt(e.target.value)}
-                placeholder="İyileştirmek istediğin promptu buraya yaz veya yapıştır (ör. 'Excel dosyasındaki satışları analiz et', 'LinkedIn için yapay zeka içerik stratejisi yaz')..."
-                className="w-full flex-1 bg-transparent text-[#F1F5F9] placeholder-[#475569] text-xs sm:text-sm focus:outline-none resize-none prompt-editor leading-relaxed"
-                spellCheck={false}
-              />
-            </div>
-
-            {/* Hata Bildirimi */}
-            {errorMessage && (
-              <div className="p-3 rounded-lg bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2 animate-in fade-in">
-                <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <p className="font-semibold">Hata Oluştu</p>
-                  <p className="text-rose-200/80 text-[11px]">{errorMessage}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Aksiyon Butonu (Doğrudan Başlatır) */}
-            <div className="pt-2 border-t border-[#141A27]">
-              <button
-                type="button"
-                onClick={() => handleOptimize()}
-                disabled={isLoading || isTweaking || !inputPrompt.trim()}
-                className="w-full py-2.5 px-4 rounded-lg bg-[#00E5FF] hover:bg-[#33EAFF] active:bg-[#00C4D9] text-[#060913] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {isLoading ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-[#060913] border-t-transparent rounded-full animate-spin" />
-                    <span>Yapay Zekâ ile Optimize Ediliyor...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 text-[#060913]" />
-                    <span>Promptu Optimize Et</span>
-                    <ArrowRight className="w-4 h-4 text-[#060913]" />
-                  </>
-                )}
-              </button>
-            </div>
+      {/* 3. ANA ÇALIŞMA ALANI (SOL: PROMPT'UNU GELİŞTİR PANELİ | SAĞ: ÇİFT EDİTÖR) */}
+      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 flex-1 flex flex-col">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 items-start">
+          
+          {/* SOL PANEL: PROMPT'UNU GELİŞTİR (Referans Tasarım: promptcowboy) */}
+          <div
+            className={`lg:col-span-4 xl:col-span-4 flex flex-col space-y-4 ${
+              mobileTab === "questions" ? "block" : "hidden lg:flex"
+            }`}
+          >
+            <AdaptiveImprovementPanel
+              questions={adaptiveQuestions}
+              answers={adaptiveAnswers}
+              onAnswerChange={handleAnswerChange}
+              onSkipQuestion={handleSkipQuestion}
+              onReanalyze={() => triggerClarificationAnalysis(inputPrompt)}
+              isAnalyzing={isAnalyzingQuestions}
+            />
           </div>
 
-          {/* SAĞ PANEL: OPTİMİZE EDİLMİŞ PROMPT & CANLI İNCE AYAR ÇİPLERİ */}
-          <div className="flex flex-col rounded-xl bg-[#0B0E17] border border-[#161D2C] hover:border-[#222C42] transition p-4 sm:p-5 space-y-3">
-            <div className="flex items-center justify-between border-b border-[#141A27] pb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#10B981]" />
-                <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Optimize Edilmiş Prompt
-                </h2>
-              </div>
-              {result && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#10B981]/15 text-[#34D399] border border-[#10B981]/30">
-                    Hazır
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* LOADING DURUMU (İLK OPTİMİZASYON) */}
-            {isLoading && (
-              <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] sm:min-h-[420px] text-center space-y-3">
-                <div className="w-8 h-8 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin" />
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-[#E2E8F0]">
-                    Prompt mimarisi oluşturuluyor
-                  </p>
-                  <p className="text-[11px] text-[#64748B]">
-                    Rol, negatif kısıtlar ve editoryal akış optimize ediliyor...
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* SUCCESS DURUMU: CANLI İNCE AYAR ÇİPLERİ + EDİTÖR */}
-            {!isLoading && result && (
-              <div className="flex-1 flex flex-col space-y-3 animate-in fade-in duration-200">
-                {/* 🎯 CANLI SAYFA ÜZERİNDE BAĞLAM İNCE AYARI (TWEAK PANELİ) */}
-                <div className="p-3 rounded-xl bg-[#080B12] border border-[#161D2C] space-y-2.5">
-                  <div className="flex items-center justify-between text-xs border-b border-[#141A27] pb-1.5">
-                    <span className="font-semibold text-white flex items-center gap-1.5">
-                      <SlidersHorizontal className="w-3.5 h-3.5 text-[#00E5FF]" />
-                      <span>Canlı Bağlam & İnce Ayar</span>
-                    </span>
-                    <span className="text-[10px] text-[#64748B]">
-                      Seçim yaptığınızda anında yeniden derlenir
-                    </span>
+          {/* SAĞ PANEL: TEMBEL PROMPT & HARİKA PROMPT (8 Kolon) */}
+          <div
+            className={`lg:col-span-8 xl:col-span-8 flex flex-col space-y-4 ${
+              mobileTab === "studio" ? "block" : "hidden lg:flex"
+            }`}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 items-stretch">
+              {/* SOL İÇ PANEL: ORİJİNAL PROMPT (Tembel Prompt) */}
+              <div className="flex flex-col rounded-xl bg-[#0B0E17] border border-[#161D2C] hover:border-[#222C42] transition p-4 sm:p-5 space-y-3">
+                <div className="flex items-center justify-between border-b border-[#141A27] pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#00E5FF]" />
+                    <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Tembel Prompt
+                    </h2>
                   </div>
-
-                  {/* Sektör Çipleri */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1 text-[11px] text-[#94A3B8]">
-                      <Building2 className="w-3 h-3 text-[#00E5FF]" />
-                      <span>Sektör:</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {SECTOR_OPTIONS.map((sec) => {
-                        const isSelected = selectedSector === sec;
-                        return (
-                          <button
-                            key={sec}
-                            type="button"
-                            disabled={isTweaking}
-                            onClick={() => {
-                              setSelectedSector(sec);
-                              handleOptimize(sec, selectedAudience, selectedFormat);
-                            }}
-                            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer flex items-center gap-1 ${
-                              isSelected
-                                ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/50 shadow-sm"
-                                : "bg-[#0E131F] text-[#94A3B8] hover:text-white hover:bg-[#141C2E] border border-[#161D2C]"
-                            }`}
-                          >
-                            <span>{sec}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {/* Diğer Sektör için Özel Giriş */}
-                    {selectedSector === "Diğer (Özel)" && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <input
-                          type="text"
-                          value={customSector}
-                          onChange={(e) => setCustomSector(e.target.value)}
-                          placeholder="Örn: Otomotiv Yedek Parça, Sağlık/Medikal..."
-                          className="flex-1 bg-[#0E131F] border border-[#00E5FF]/40 rounded-lg px-2.5 py-1 text-xs text-white placeholder-[#475569] focus:outline-none focus:border-[#00E5FF]"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleOptimize(
-                              "Diğer (Özel)",
-                              selectedAudience,
-                              selectedFormat
-                            )
-                          }
-                          className="px-2.5 py-1 rounded-lg bg-[#00E5FF] text-[#060913] text-xs font-bold hover:bg-[#33EAFF] cursor-pointer"
-                        >
-                          Uygula
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Hedef Kitle Çipleri */}
-                  <div className="space-y-1 pt-1">
-                    <div className="flex items-center gap-1 text-[11px] text-[#94A3B8]">
-                      <Users className="w-3 h-3 text-[#00E5FF]" />
-                      <span>Hedef Kitle:</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {AUDIENCE_OPTIONS.map((aud) => {
-                        const isSelected = selectedAudience === aud;
-                        return (
-                          <button
-                            key={aud}
-                            type="button"
-                            disabled={isTweaking}
-                            onClick={() => {
-                              setSelectedAudience(aud);
-                              handleOptimize(selectedSector, aud, selectedFormat);
-                            }}
-                            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
-                              isSelected
-                                ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/50 shadow-sm"
-                                : "bg-[#0E131F] text-[#94A3B8] hover:text-white hover:bg-[#141C2E] border border-[#161D2C]"
-                            }`}
-                          >
-                            <span>{aud}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sonuç Editörü (İnce ayar sırasında hafif saydamlaşır) */}
-                <div
-                  className={`flex-1 relative min-h-[260px] sm:min-h-[320px] transition-opacity ${
-                    isTweaking ? "opacity-40 pointer-events-none" : "opacity-100"
-                  }`}
-                >
-                  {isTweaking && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#07090E]/60 backdrop-blur-xs rounded-xl">
-                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0E131F] border border-[#00E5FF]/40 text-[#00E5FF] text-xs font-medium shadow-lg">
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Yeni bağlam ile güncelleniyor...</span>
-                      </div>
-                    </div>
+                  {inputPrompt && (
+                    <button
+                      type="button"
+                      onClick={handleClear}
+                      className="text-[11px] text-[#64748B] hover:text-[#E2E8F0] transition inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Temizle
+                    </button>
                   )}
+                </div>
+
+                {/* Metin Alanı */}
+                <div className="flex-1 flex flex-col min-h-[260px] sm:min-h-[360px]">
                   <textarea
-                    value={editablePrompt}
-                    onChange={(e) => setEditablePrompt(e.target.value)}
-                    className="w-full h-full min-h-[260px] sm:min-h-[320px] bg-transparent text-[#E2E8F0] text-xs sm:text-sm focus:outline-none resize-none prompt-editor leading-relaxed selection:bg-[#00E5FF]/20"
+                    value={inputPrompt}
+                    onChange={(e) => handleInputChange(e.target.value)}
+                    placeholder="Ham promptunu buraya yaz (ör. 'linkedin gönderisi yaz', 'exceldeki eksik stokları listele', 'python ile veri çek')..."
+                    className="w-full flex-1 bg-transparent text-[#F1F5F9] placeholder-[#475569] text-xs sm:text-sm focus:outline-none resize-none prompt-editor leading-relaxed"
                     spellCheck={false}
                   />
                 </div>
 
-                {/* Alt Aksiyon Çubuğu */}
-                <div className="pt-2 border-t border-[#141A27] flex items-center justify-between">
-                  <span className="text-[11px] text-[#64748B] flex items-center gap-1.5">
-                    <Edit3 className="w-3 h-3" />
-                    <span>Doğrudan metni düzenleyebilir veya yukarıdan ince ayar yapabilirsiniz</span>
-                  </span>
+                {/* Hata Bildirimi */}
+                {errorMessage && (
+                  <div className="p-3 rounded-lg bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-semibold">Hata Oluştu</p>
+                      <p className="text-rose-200/80 text-[11px]">{errorMessage}</p>
+                    </div>
+                  </div>
+                )}
 
+                {/* Aksiyon Butonu */}
+                <div className="pt-2 border-t border-[#141A27]">
                   <button
                     type="button"
-                    onClick={handleCopy}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      copied
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                        : "bg-[#0E1522] hover:bg-[#152033] text-[#00E5FF] border border-[#00E5FF]/40"
-                    }`}
+                    onClick={() => handleOptimize()}
+                    disabled={isLoading || isTweaking || !inputPrompt.trim()}
+                    className="w-full py-2.5 px-4 rounded-lg bg-[#00E5FF] hover:bg-[#33EAFF] active:bg-[#00C4D9] text-[#060913] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-[#00E5FF]/10"
                   >
-                    {copied ? (
+                    {isLoading ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Kopyalandı!</span>
+                        <div className="w-3.5 h-3.5 border-2 border-[#060913] border-t-transparent rounded-full animate-spin" />
+                        <span>Optimize Ediliyor...</span>
                       </>
                     ) : (
                       <>
-                        <Copy className="w-3.5 h-3.5 text-[#00E5FF]" />
-                        <span>Promptu Kopyala</span>
+                        <Sparkles className="w-4 h-4 text-[#060913]" />
+                        <span>Promptu Optimize Et</span>
+                        <ArrowRight className="w-4 h-4 text-[#060913]" />
                       </>
                     )}
                   </button>
                 </div>
               </div>
-            )}
 
-            {/* EMPTY DURUMU */}
-            {!isLoading && !result && (
-              <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] sm:min-h-[420px] text-center space-y-3 text-[#475569]">
-                <div className="w-10 h-10 rounded-xl bg-[#0E131F] border border-[#161D2C] flex items-center justify-center text-[#64748B]">
-                  <Sparkles className="w-5 h-5 text-[#64748B]" />
+              {/* SAĞ İÇ PANEL: HARİKA PROMPT */}
+              <div className="flex flex-col rounded-xl bg-[#0B0E17] border border-[#161D2C] hover:border-[#222C42] transition p-4 sm:p-5 space-y-3">
+                <div className="flex items-center justify-between border-b border-[#141A27] pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+                    <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Harika Prompt
+                    </h2>
+                  </div>
+                  {result && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#10B981]/15 text-[#34D399] border border-[#10B981]/30">
+                        ✓ Otomatik güncellendi
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-1 max-w-xs">
-                  <p className="text-xs font-semibold text-[#94A3B8]">
-                    Henüz optimize edilmiş prompt yok
-                  </p>
-                  <p className="text-[11px] text-[#64748B] leading-relaxed">
-                    Sol panele ham promptunu girip <strong>Promptu Optimize Et</strong> butonuna bastığında sonuç burada listelenir. Ardından sayfa üzerinde sektör ve hedef kitle ayarı yapabilirsin.
-                  </p>
-                </div>
+
+                {/* LOADING DURUMU */}
+                {isLoading && (
+                  <div className="flex-1 flex flex-col items-center justify-center min-h-[260px] sm:min-h-[360px] text-center space-y-3">
+                    <div className="w-8 h-8 border-2 border-[#00E5FF] border-t-transparent rounded-full animate-spin" />
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-[#E2E8F0]">
+                        Prompt mimarisi oluşturuluyor
+                      </p>
+                      <p className="text-[11px] text-[#64748B]">
+                        Rol, bağlam ve güvenlik bariyerleri optimize ediliyor...
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* SUCCESS DURUMU */}
+                {!isLoading && result && (
+                  <div className="flex-1 flex flex-col space-y-3 animate-in fade-in duration-200">
+                    <div
+                      className={`flex-1 relative min-h-[260px] sm:min-h-[360px] transition-opacity ${
+                        isTweaking ? "opacity-40 pointer-events-none" : "opacity-100"
+                      }`}
+                    >
+                      {isTweaking && (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#07090E]/60 backdrop-blur-xs rounded-xl">
+                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0E131F] border border-[#00E5FF]/40 text-[#00E5FF] text-xs font-medium shadow-lg">
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Cevabınızla güncelleniyor...</span>
+                          </div>
+                        </div>
+                      )}
+                      <textarea
+                        value={editablePrompt}
+                        onChange={(e) => setEditablePrompt(e.target.value)}
+                        className="w-full h-full min-h-[260px] sm:min-h-[360px] bg-transparent text-[#E2E8F0] text-xs sm:text-sm focus:outline-none resize-none prompt-editor leading-relaxed selection:bg-[#00E5FF]/20"
+                        spellCheck={false}
+                      />
+                    </div>
+
+                    {/* Alt Aksiyon Çubuğu */}
+                    <div className="pt-2 border-t border-[#141A27] flex items-center justify-between">
+                      <span className="text-[11px] text-[#64748B] flex items-center gap-1.5">
+                        <Edit3 className="w-3 h-3" />
+                        <span>Sol panelden soruları yanıtlayarak anında geliştirebilirsiniz</span>
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={handleCopy}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          copied
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                            : "bg-[#0E1522] hover:bg-[#152033] text-[#00E5FF] border border-[#00E5FF]/40"
+                        }`}
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Kopyalandı!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-[#00E5FF]" />
+                            <span>Kopyala</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* EMPTY DURUMU */}
+                {!isLoading && !result && (
+                  <div className="flex-1 flex flex-col items-center justify-center min-h-[260px] sm:min-h-[360px] text-center space-y-3 text-[#475569]">
+                    <div className="w-10 h-10 rounded-xl bg-[#0E131F] border border-[#161D2C] flex items-center justify-center text-[#64748B]">
+                      <Sparkles className="w-5 h-5 text-[#64748B]" />
+                    </div>
+                    <div className="space-y-1 max-w-xs">
+                      <p className="text-xs font-semibold text-[#94A3B8]">
+                        Henüz optimize edilmiş prompt yok
+                      </p>
+                      <p className="text-[11px] text-[#64748B] leading-relaxed">
+                        Sol alana bir prompt girin ve <strong>Promptu Optimize Et</strong> butonuna tıklayın. Sol paneldeki sorularla promptunuzu derinleştirebilirsiniz.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
       </main>

@@ -50,6 +50,9 @@ export interface ClarifyQuestion {
   question: string;
   options: string[];
   allow_custom: boolean;
+  priority?: "critical" | "high" | "medium";
+  helper_text?: string;
+  category?: "role" | "context" | "task" | "format";
 }
 
 export interface ClarifyResponse {
